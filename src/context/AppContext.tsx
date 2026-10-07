@@ -55,12 +55,6 @@ interface AppContextType {
   whatsAppTargetCliente: Cliente | null;
   setWhatsAppTargetCliente: (cliente: Cliente | null) => void;
 
-  // Guided Tour Mode ("Modo demonstração")
-  demoTourActive: boolean;
-  setDemoTourActive: (active: boolean) => void;
-  demoStep: number;
-  setDemoStep: (step: number) => void;
-
   // Actions
   showToast: (text: string, subtext?: string, erro?: boolean) => void;
   toasts: ToastMessage[];
@@ -178,8 +172,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedContratoId, setSelectedContratoId] = useState<string | null>(null);
   const [whatsAppTargetCliente, setWhatsAppTargetCliente] = useState<Cliente | null>(null);
 
-  const [demoTourActive, setDemoTourActive] = useState<boolean>(false);
-  const [demoStep, setDemoStep] = useState<number>(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback((text: string, subtext?: string, erro?: boolean) => {
@@ -266,7 +258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const navigateToContrato = (contratoId: string) => {
     setSelectedMotoId(null);
     setSelectedClienteId(null);
-    setActiveTab('contratos');
+    setActiveTab('alugueis');
     setSelectedContratoId(contratoId);
   };
 
@@ -318,10 +310,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedContratoId,
         whatsAppTargetCliente,
         setWhatsAppTargetCliente,
-        demoTourActive,
-        setDemoTourActive,
-        demoStep,
-        setDemoStep,
         showToast,
         toasts,
         dismissToast,

@@ -3,7 +3,6 @@ export type NavTab =
   | 'frota'
   | 'clientes'
   | 'alugueis'
-  | 'contratos'
   | 'financeiro'
   | 'manutencao'
   | 'comercial'

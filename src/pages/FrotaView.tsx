@@ -118,6 +118,7 @@ export const FrotaView: React.FC = () => {
         </div>
 
         <button
+          data-dica="Cadastra uma moto nova na frota (modelo, placa, km, valor do aluguel e rastreador GPS)."
           onClick={() => setAddModalOpen(true)}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
         >
@@ -142,6 +143,7 @@ export const FrotaView: React.FC = () => {
         <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-xl overflow-x-auto">
           {filters.map((f) => (
             <button
+              data-dica="Filtra as motos pela situação."
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
@@ -238,6 +240,7 @@ export const FrotaView: React.FC = () => {
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                     {condutor ? (
                       <button
+                        data-dica="Abrir o cadastro do cliente que está com esta moto."
                         onClick={() => navigateToCliente(condutor.id)}
                         className="flex items-center gap-1.5 text-slate-700 hover:text-[#087BFF] font-medium truncate"
                       >
@@ -259,6 +262,7 @@ export const FrotaView: React.FC = () => {
               {/* Ações do card */}
               <div className="grid grid-cols-3 border-t border-slate-100 bg-slate-50/60 divide-x divide-slate-200/70 text-xs font-semibold">
                 <button
+                  data-dica="Ficha completa da moto: km, posição do GPS, manutenções e quem está com ela."
                   onClick={() => setSelectedMotoId(moto.id)}
                   className="py-2.5 px-2 flex items-center justify-center gap-1.5 text-slate-700 hover:bg-slate-100 hover:text-[#087BFF] transition-colors whitespace-nowrap"
                 >
@@ -266,6 +270,7 @@ export const FrotaView: React.FC = () => {
                   Detalhes
                 </button>
                 <button
+                  data-dica="Alterar dados da moto, valores do aluguel e o número (IMEI) do rastreador GPS."
                   onClick={() => setEditingMoto({ ...moto })}
                   className="py-2.5 px-2 flex items-center justify-center gap-1.5 text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors whitespace-nowrap"
                 >
@@ -273,6 +278,7 @@ export const FrotaView: React.FC = () => {
                   Editar / GPS
                 </button>
                 <button
+                  data-dica="Para moto sem GPS: digite o km que aparece no painel. O sistema calcula os km rodados e as cobranças."
                   onClick={() => {
                     setKmMoto(moto);
                     setKmLeitura(Math.round(moto.kmAtual));

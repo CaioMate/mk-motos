@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, AlertCircle, Play, ChevronRight, Satellite } from 'lucide-react';
+import { ArrowUpRight, AlertCircle, ChevronRight, Satellite } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NavTab } from '../types/mkMotos';
 import { resumoFinanceiro, resumoFrota, serieMensal } from '../lib/indicadores';
@@ -17,8 +17,6 @@ export const DashboardView: React.FC = () => {
     estado,
     navigateToMoto,
     navigateToCliente,
-    setDemoTourActive,
-    setDemoStep,
   } = useApp();
 
   const frota = resumoFrota(motos);
@@ -45,6 +43,7 @@ export const DashboardView: React.FC = () => {
     detail: string;
     accent?: 'red' | 'blue' | 'dark';
     targetTab: NavTab;
+    dica: string;
   }> = [
     {
       label: 'MOTOS DA FROTA',
@@ -52,6 +51,7 @@ export const DashboardView: React.FC = () => {
       detail: `${frota.comGps} com rastreador GPS`,
       accent: 'dark',
       targetTab: 'frota',
+      dica: 'Quantas motos você tem cadastradas no total. Clique para ver a frota.',
     },
     {
       label: 'MOTOS ALUGADAS',
@@ -59,12 +59,14 @@ export const DashboardView: React.FC = () => {
       detail: `${pct(frota.ocupacao)} de taxa de ocupação`,
       accent: 'blue',
       targetTab: 'frota',
+      dica: 'Motos que estão com clientes agora. Ocupação = quanto da frota está gerando dinheiro.',
     },
     {
       label: 'DISPONÍVEIS',
       value: String(frota.disponiveis),
       detail: 'Prontas para retirada imediata',
       targetTab: 'frota',
+      dica: 'Motos paradas, prontas para alugar hoje.',
     },
     {
       label: 'EM MANUTENÇÃO',
@@ -72,18 +74,21 @@ export const DashboardView: React.FC = () => {
       detail: 'Na oficina neste momento',
       accent: 'red',
       targetTab: 'manutencao',
+      dica: 'Motos na oficina, que não podem ser alugadas agora. Clique para ver as manutenções.',
     },
     {
       label: 'CLIENTES COM MOTO',
       value: String(clientesAtivos),
       detail: `${clientes.length} cadastrados · +${novosClientes} nos últimos 30 dias`,
       targetTab: 'clientes',
+      dica: 'Clientes que estão com uma moto alugada neste momento.',
     },
     {
       label: 'CONTRATOS ATIVOS',
       value: String(contratosAtivos),
       detail: aguardando ? `${aguardando} aguardando assinatura` : 'Nenhum pendente de assinatura',
-      targetTab: 'contratos',
+      targetTab: 'alugueis',
+      dica: 'Contratos em vigor. Os que aguardam assinatura precisam ser assinados em Aluguéis e Contratos.',
     },
     {
       label: 'RECEBIDO NO MÊS',
@@ -91,6 +96,7 @@ export const DashboardView: React.FC = () => {
       detail: anterior?.receita ? `${variacao >= 0 ? '+' : ''}${pct(variacao)} vs. mês anterior` : 'Pagamentos confirmados',
       accent: 'blue',
       targetTab: 'financeiro',
+      dica: 'Dinheiro que já entrou este mês (pagamentos confirmados).',
     },
     {
       label: 'A RECEBER / ATRASADO',
@@ -98,6 +104,7 @@ export const DashboardView: React.FC = () => {
       detail: fin.atrasado ? `${brlCurto(fin.atrasado)} em atraso` : 'Nenhuma cobrança atrasada',
       accent: 'red',
       targetTab: 'financeiro',
+      dica: 'Cobranças que ainda não foram pagas, incluindo as atrasadas. Clique para cobrar.',
     },
   ];
 
@@ -122,20 +129,9 @@ export const DashboardView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {estado.config.modoDemonstracao && (
-            <button
-              onClick={() => {
-                setDemoTourActive(true);
-                setDemoStep(0);
-              }}
-              className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors whitespace-nowrap"
-            >
-              <Play className="h-3.5 w-3.5 text-[#087BFF] fill-current" />
-              Apresentação Guiada
-            </button>
-          )}
           <button
             onClick={() => setActiveTab('alugueis')}
+            data-dica="Abre a tela de Aluguéis e Contratos para alugar uma moto em poucos passos."
             className="flex items-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
           >
             + Novo Aluguel
@@ -149,6 +145,7 @@ export const DashboardView: React.FC = () => {
           {kpiCards.map((card, idx) => (
             <button
               key={idx}
+              data-dica={card.dica}
               onClick={() => setActiveTab(card.targetTab)}
               className="group text-left rounded-xl border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm transition-all flex flex-col justify-between"
             >

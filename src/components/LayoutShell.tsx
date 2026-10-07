@@ -4,7 +4,6 @@ import {
   Bike,
   Users,
   KeyRound,
-  FileText,
   Wallet,
   Wrench,
   Megaphone,
@@ -14,9 +13,6 @@ import {
   Search,
   Menu,
   X,
-  Play,
-  ChevronRight,
-  ChevronLeft,
   CheckCircle2,
   ShieldCheck,
   AlertTriangle,
@@ -25,118 +21,26 @@ import {
 import { useApp } from '../context/AppContext';
 import { NavTab } from '../types/mkMotos';
 import { GlobalModals } from './GlobalModals';
+import { DicaFlutuante } from './DicaFlutuante';
 
 interface NavItemConfig {
   id: NavTab;
   label: string;
   icon: React.ElementType;
+  dica: string;
 }
 
 const NAV_ITEMS: NavItemConfig[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'frota', label: 'Frota', icon: Bike },
-  { id: 'clientes', label: 'Clientes', icon: Users },
-  { id: 'alugueis', label: 'Aluguéis', icon: KeyRound },
-  { id: 'contratos', label: 'Contratos', icon: FileText },
-  { id: 'financeiro', label: 'Financeiro', icon: Wallet },
-  { id: 'manutencao', label: 'Manutenção', icon: Wrench },
-  { id: 'comercial', label: 'Comercial', icon: Megaphone },
-  { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { id: 'configuracoes', label: 'Configurações', icon: Settings },
-];
-
-const PRESENTATION_STEPS = [
-  {
-    step: 1,
-    title: '1. Visão Geral no Dashboard',
-    description: 'Mostre os indicadores em tempo real: motos na frota, alugadas, disponíveis, receita e alertas automáticos.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.setSelectedMotoId(null);
-      ctx.setSelectedClienteId(null);
-      ctx.setSelectedContratoId(null);
-      ctx.setActiveTab('dashboard');
-    },
-  },
-  {
-    step: 2,
-    title: '2. Entrar na Gestão de Frota',
-    description: 'Visualize todas as motocicletas da MK Motos com fotos, placas, quilometragem e status operacional.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.setSelectedMotoId(null);
-      ctx.setSelectedClienteId(null);
-      ctx.setSelectedContratoId(null);
-      ctx.setActiveTab('frota');
-    },
-  },
-  {
-    step: 3,
-    title: '3. Selecionar Honda CG 160 (ABC-1234)',
-    description: 'Abra a ficha técnica da Honda CG 160 e mostre que ela está alugada para João Silva e com revisão em 360 km.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.navigateToMoto('moto-1');
-    },
-  },
-  {
-    step: 4,
-    title: '4. Abrir o Cliente João Silva',
-    description: 'Da própria moto, navegue para o prontuário de João Silva: CNH, contato, moto vinculada e histórico.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.navigateToCliente('cli-1');
-    },
-  },
-  {
-    step: 5,
-    title: '5. Visualizar o Contrato CTR-2026-001',
-    description: 'Exiba o contrato formal gerado automaticamente vinculando João Silva e a Honda CG 160.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.navigateToContrato('ctr-1');
-    },
-  },
-  {
-    step: 6,
-    title: '6. Conferir Pagamento no Financeiro',
-    description: 'Mostre a mensalidade de R$ 850 do João Silva (Pago via PIX) e faturas pendentes/atrasadas.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.setSelectedMotoId(null);
-      ctx.setSelectedClienteId(null);
-      ctx.setSelectedContratoId(null);
-      ctx.setActiveTab('financeiro');
-    },
-  },
-  {
-    step: 7,
-    title: '7. Controle Preventivo de Manutenção',
-    description: 'Mostre a Honda CG 160 com 9.640 km e alerta preventivo "Revisão em 360 km" (próxima aos 10.000 km).',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.setSelectedMotoId(null);
-      ctx.setSelectedClienteId(null);
-      ctx.setSelectedContratoId(null);
-      ctx.setActiveTab('manutencao');
-    },
-  },
-  {
-    step: 8,
-    title: '8. Central Comercial & Origem Instagram',
-    description: 'Mostre como o marketing no Instagram gerou o lead do João Silva e alimenta o pipeline Kanban de locação.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.setSelectedMotoId(null);
-      ctx.setSelectedClienteId(null);
-      ctx.setSelectedContratoId(null);
-      ctx.setActiveTab('comercial');
-    },
-  },
-  {
-    step: 9,
-    title: '9. Relatórios Executivos',
-    description: 'Finalize apresentando os relatórios gerenciais de frota, receita, manutenção e conversão comercial.',
-    run: (ctx: ReturnType<typeof useApp>) => {
-      ctx.setSelectedMotoId(null);
-      ctx.setSelectedClienteId(null);
-      ctx.setSelectedContratoId(null);
-      ctx.setActiveTab('relatorios');
-    },
-  },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, dica: 'Resumo do dia: motos alugadas, dinheiro recebido, alertas e últimas atividades.' },
+  { id: 'frota', label: 'Frota', icon: Bike, dica: 'Todas as suas motos: placa, km, rastreador GPS e se está alugada, livre ou na oficina.' },
+  { id: 'clientes', label: 'Clientes', icon: Users, dica: 'Cadastro dos clientes: CPF, CNH, telefone, moto que está com ele e histórico.' },
+  { id: 'alugueis', label: 'Aluguéis e Contratos', icon: KeyRound, dica: 'Criar um aluguel novo, ver e assinar contratos, acompanhar km rodados e devolver a moto.' },
+  { id: 'financeiro', label: 'Financeiro', icon: Wallet, dica: 'Mensalidades, cobranças por km, pagamentos recebidos, atrasados e despesas.' },
+  { id: 'manutencao', label: 'Manutenção', icon: Wrench, dica: 'Revisões, trocas de óleo e peças, e comprovantes enviados pelos clientes para aprovar.' },
+  { id: 'comercial', label: 'Comercial', icon: Megaphone, dica: 'Interessados (leads) e campanhas: acompanhe quem pediu informação até virar cliente.' },
+  { id: 'relatorios', label: 'Relatórios', icon: BarChart3, dica: 'Gráficos e números do negócio: receita, ocupação da frota, manutenção e vendas.' },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, dica: 'Conversas com os clientes e mensagens automáticas enviadas pelo sistema.' },
+  { id: 'configuracoes', label: 'Configurações', icon: Settings, dica: 'Valores de cobrança por km, plano de peças, oficinas, cidades permitidas e GPS.' },
 ];
 
 export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -151,13 +55,8 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
     navigateToMoto,
     navigateToCliente,
     navigateToContrato,
-    demoTourActive,
-    setDemoTourActive,
-    demoStep,
-    setDemoStep,
     toasts,
     dismissToast,
-    showToast,
     alertas,
     conexao,
     config,
@@ -208,13 +107,6 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasSearchResults =
     matchedMotos.length > 0 || matchedClientes.length > 0 || matchedContratos.length > 0;
 
-  const triggerStep = (index: number) => {
-    const target = PRESENTATION_STEPS[index];
-    if (!target) return;
-    setDemoStep(index);
-    target.run(appCtx);
-  };
-
   return (
     <div className="min-h-screen flex bg-[#F8FAFC] text-[#0B0B0B]">
       {/* SIDEBAR FIXA (DESKTOP) */}
@@ -247,6 +139,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
             return (
               <button
                 key={item.id}
+                data-dica={item.dica}
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 whitespace-nowrap ${
                   isActive
@@ -272,33 +165,8 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
           })}
         </nav>
 
-        {/* RODAPÉ DO MENU: MODO DEMONSTRAÇÃO + PERFIL ADMINISTRADOR */}
+        {/* RODAPÉ DO MENU: PERFIL ADMINISTRADOR */}
         <div className="p-4 border-t border-white/10 space-y-3 bg-[#0B0B0B]">
-          {config.modoDemonstracao && (
-          <button
-            onClick={() => {
-              const nextState = !demoTourActive;
-              setDemoTourActive(nextState);
-              if (nextState) {
-                triggerStep(0);
-                showToast(
-                  'Modo demonstração ativado ✓',
-                  'Use a barra superior para guiar a apresentação ao proprietário.'
-                );
-              } else {
-                showToast('Modo demonstração recolhido ✓');
-              }
-            }}
-            className={`w-full flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
-              demoTourActive
-                ? 'bg-[#087BFF] text-white'
-                : 'border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
-            }`}
-          >
-            <Play className="h-3.5 w-3.5 fill-current" />
-            <span>{demoTourActive ? 'Roteiro Guiado Ativo' : 'Modo demonstração'}</span>
-          </button>
-          )}
 
           <div className="flex items-center gap-3 pt-1 px-1">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white border border-white/15 shrink-0">
@@ -339,6 +207,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 return (
                   <button
                     key={item.id}
+                    data-dica={item.dica}
                     onClick={() => {
                       setActiveTab(item.id);
                       setMobileMenuOpen(false);
@@ -356,16 +225,6 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
               })}
             </nav>
             <div className="p-4 border-t border-white/10 space-y-3">
-              <button
-                onClick={() => {
-                  setDemoTourActive(!demoTourActive);
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#087BFF] px-3.5 py-2.5 text-xs font-semibold text-white"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span>Modo demonstração</span>
-              </button>
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-xs font-bold">
                   MK
@@ -405,6 +264,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
                   setSearchFocused(true);
                 }}
                 placeholder="Buscar motos, clientes, contratos..."
+                data-dica="Digite placa, modelo, nome, telefone, CPF ou número do contrato para ir direto ao cadastro."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#087BFF] focus:bg-white focus:outline-none transition-colors"
               />
               {searchQuery && (
@@ -520,7 +380,12 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
               className={`hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono-tabular font-semibold tracking-wider select-none ${
                 conexao === 'online' ? 'text-emerald-600' : 'text-[#E50914]'
               }`}
-              title={conexao === 'online' ? 'Conectado ao servidor — dados atualizam sozinhos' : 'Sem conexão com o servidor'}
+              data-dica={
+                (conexao === 'online'
+                  ? 'Conectado ao servidor — os dados atualizam sozinhos.'
+                  : 'Sem conexão com o servidor. Verifique se o computador do sistema está ligado.') +
+                (config.modoDemonstracao ? ' DEMONSTRAÇÃO: os dados são de exemplo; apague em Configurações.' : '')
+              }
             >
               <span className={`h-2 w-2 rounded-full ${conexao === 'online' ? 'bg-emerald-500' : 'bg-[#E50914]'}`} />
               {conexao === 'online' ? 'ONLINE' : 'OFFLINE'}
@@ -533,6 +398,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 onClick={() => setNotifOpen(!notifOpen)}
                 className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 hover:bg-slate-50 transition-colors"
                 aria-label="Notificações do sistema"
+                data-dica="Alertas automáticos: pagamentos atrasados, contratos vencidos, trocas de óleo, GPS sem sinal. Clique para ver."
               >
                 <Bell className="h-4 w-4" />
                 {alertas.length > 0 && (
@@ -581,61 +447,15 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         </header>
 
-        {/* BARRA DE ROTEIRO GUIADO PARA APRESENTAÇÃO COMERCIAL (QUANDO ATIVO) */}
-        {demoTourActive && (
-          <div className="bg-[#0B0B0B] text-white border-b border-white/10 px-4 sm:px-8 py-3">
-            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start sm:items-center gap-3">
-                <span className="rounded-md bg-[#E50914] px-2 py-1 text-[11px] font-bold font-mono-tabular shrink-0">
-                  PASSO {demoStep + 1}/{PRESENTATION_STEPS.length}
-                </span>
-                <div>
-                  <p className="text-xs sm:text-sm font-bold text-white">
-                    {PRESENTATION_STEPS[demoStep]?.title}
-                  </p>
-                  <p className="text-xs text-slate-300">
-                    {PRESENTATION_STEPS[demoStep]?.description}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() =>
-                    triggerStep(
-                      (demoStep - 1 + PRESENTATION_STEPS.length) % PRESENTATION_STEPS.length
-                    )
-                  }
-                  className="flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10 transition-colors"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  Anterior
-                </button>
-                <button
-                  onClick={() => triggerStep((demoStep + 1) % PRESENTATION_STEPS.length)}
-                  className="flex items-center gap-1 rounded-lg bg-[#087BFF] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 transition-colors"
-                >
-                  Próximo Passo
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setDemoTourActive(false)}
-                  className="ml-1 rounded-lg p-1.5 text-slate-400 hover:text-white"
-                  title="Fechar roteiro guiado"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* VIEWPORT PRINCIPAL */}
         <main className="flex-1 p-4 sm:p-8 max-w-[1440px] w-full mx-auto">{children}</main>
       </div>
 
       {/* MODAIS CONECTADOS GLOBAIS */}
       <GlobalModals />
+
+      {/* DICAS AO PASSAR O MOUSE */}
+      <DicaFlutuante />
 
       {/* TOAST NOTIFICATIONS */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">

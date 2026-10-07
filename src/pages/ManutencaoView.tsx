@@ -121,6 +121,7 @@ export const ManutencaoView: React.FC = () => {
         </div>
 
         <button
+          data-dica="Registra uma manutenção feita ou a fazer (revisão, troca de peça, conserto) com custo e oficina."
           onClick={abrirNova}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
         >
@@ -199,6 +200,7 @@ export const ManutencaoView: React.FC = () => {
                   <div className="flex flex-wrap gap-1.5 self-start">
                     {cli && item.situacao === 'aguardando_comprovante' && (
                       <button
+                        data-dica="Manda de novo o aviso de troca para o cliente pelo WhatsApp."
                         onClick={() => reenviarAvisoTroca(item.id)}
                         className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-semibold text-emerald-800 hover:bg-emerald-100 whitespace-nowrap"
                       >
@@ -219,6 +221,7 @@ export const ManutencaoView: React.FC = () => {
                       />
                     </label>
                     <button
+                      data-dica="Marca a manutenção como terminada e registra o custo final."
                       onClick={() => {
                         setConclusao({ custo: item.custo, oficina: item.oficina, observacao: '' });
                         setConcluindo(item);
@@ -268,12 +271,14 @@ export const ManutencaoView: React.FC = () => {
                     {comp.status === 'pendente' && (
                       <div className="flex sm:flex-col gap-1.5 self-start">
                         <button
+                          data-dica="Aceita o comprovante que o cliente mandou: a troca fica registrada como feita."
                           onClick={() => aprovarComprovante(item.id, comp.id)}
                           className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-500 whitespace-nowrap"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" /> Aprovar
                         </button>
                         <button
+                          data-dica="Recusa o comprovante e avisa o cliente pelo WhatsApp com o motivo."
                           onClick={() => {
                             const motivo = window.prompt('Motivo da recusa (vai para o cliente pelo WhatsApp):', 'o comprovante não é da oficina credenciada');
                             if (motivo !== null) recusarComprovante(item.id, comp.id, motivo);

@@ -227,7 +227,7 @@ export function calcularAlertas(e: EstadoSistema): AlertaSistema[] {
       titulo: `${contratosVencidos.length} contrato${contratosVencidos.length > 1 ? 's' : ''} vencido${contratosVencidos.length > 1 ? 's' : ''}`,
       detalhe: listar(contratosVencidos.map((c) => `${c.numero} — ${nomeCli(c.clienteId)}`)),
       severidade: 'alta',
-      destinoTab: 'contratos',
+      destinoTab: 'alugueis',
     });
   }
 
@@ -285,7 +285,7 @@ export function calcularAlertas(e: EstadoSistema): AlertaSistema[] {
       titulo: `${aguardando.length} contrato${aguardando.length > 1 ? 's' : ''} aguardando assinatura`,
       detalhe: listar(aguardando.map((c) => `${c.numero} — ${nomeCli(c.clienteId)}`)),
       severidade: 'info',
-      destinoTab: 'contratos',
+      destinoTab: 'alugueis',
     });
   }
 

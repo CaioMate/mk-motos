@@ -129,6 +129,7 @@ export const ClientesView: React.FC = () => {
         </div>
 
         <button
+          data-dica="Cadastrar um cliente novo (nome, CPF, CNH, telefone, endereço)."
           onClick={abrirNovo}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
         >
@@ -153,6 +154,7 @@ export const ClientesView: React.FC = () => {
         <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-xl overflow-x-auto">
           {filters.map((f) => (
             <button
+              data-dica="Filtra os clientes pela situação."
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
@@ -225,6 +227,7 @@ export const ClientesView: React.FC = () => {
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {moto ? (
                         <button
+                          data-dica="Abrir a ficha da moto que está com este cliente."
                           onClick={() => navigateToMoto(moto.id)}
                           className="inline-flex items-center gap-1 font-semibold text-slate-900 hover:text-[#087BFF] transition-colors"
                         >
@@ -240,6 +243,7 @@ export const ClientesView: React.FC = () => {
                     <td className="py-3.5 px-4 font-mono-tabular whitespace-nowrap">
                       {ctr ? (
                         <button
+                          data-dica="Abrir o contrato deste cliente."
                           onClick={() => navigateToContrato(ctr.id)}
                           className="font-semibold text-[#087BFF] hover:underline"
                         >
@@ -270,6 +274,7 @@ export const ClientesView: React.FC = () => {
                     <td className="py-3.5 px-5 text-right whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-2">
                         <button
+                          data-dica="Mandar uma mensagem de WhatsApp para este cliente."
                           onClick={() => setWhatsAppTargetCliente(cli)}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/70 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
                         >
@@ -277,6 +282,7 @@ export const ClientesView: React.FC = () => {
                           WhatsApp
                         </button>
                         <button
+                          data-dica="Alterar os dados do cadastro do cliente."
                           onClick={() => abrirEdicao(cli)}
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                         >

@@ -89,6 +89,7 @@ export const ComercialView: React.FC = () => {
         </div>
 
         <button
+          data-dica="Cadastra uma pessoa interessada em alugar (lead) para acompanhar até fechar."
           onClick={() => setModalOpen(true)}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
         >
@@ -205,6 +206,7 @@ export const ComercialView: React.FC = () => {
                         {lead.stage !== 'ALUGUEL REALIZADO' ? (
                           <>
                             <button
+                              data-dica="Transforma este interessado em cliente cadastrado, pronto para alugar."
                               onClick={() => converterLeadEmCliente(lead.id)}
                               className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-[#0B0B0B] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#E50914] transition-colors"
                             >

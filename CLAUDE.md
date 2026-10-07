@@ -37,5 +37,9 @@ Originalmente gerado no Google AI Studio como protótipo só de front-end; agora
 ## Convenções
 - Datas sempre `dd/mm/aaaa` (helpers em `src/lib/datas.ts`); timestamps de atividade em ISO (`criadoEm`).
 - Dinheiro: `brl()` de `src/lib/formato.ts`. Indicadores/alertas: `src/lib/indicadores.ts` (nunca números fixos).
+- Dicas ao passar o mouse: escreva `data-dica="texto"` em qualquer elemento; `DicaFlutuante` (montado no
+  LayoutShell) mostra a caixa. Texto simples, para o dono (não-técnico). Não há mais roteiro/apresentação guiada.
+- Aluguéis e Contratos são uma tela só (`AlugueisView`, aba `alugueis`); `navigateToContrato` abre essa aba
+  com o modal do contrato. Não existe aba `contratos`.
 - IDs mantêm prefixos (`moto-`, `cli-`, `ctr-`…): o Dashboard usa o prefixo para navegar.
 - `data/` e `*.db` estão no `.gitignore` — contêm dados pessoais (CPF, CNH).

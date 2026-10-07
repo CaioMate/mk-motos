@@ -141,6 +141,7 @@ export const FinanceiroView: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
+            data-dica="Cria uma cobrança para um cliente (ex.: multa, dano, valor combinado). Ele pode ser avisado pelo WhatsApp."
             onClick={() => abrirForm('cobranca')}
             className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 whitespace-nowrap"
           >
@@ -148,6 +149,7 @@ export const FinanceiroView: React.FC = () => {
             Nova cobrança
           </button>
           <button
+            data-dica="Registra um dinheiro que você recebeu e que não tinha cobrança criada."
             onClick={() => abrirForm('recebimento')}
             className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
           >
@@ -232,6 +234,7 @@ export const FinanceiroView: React.FC = () => {
           <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-xl overflow-x-auto">
             {(['Em aberto', 'Atrasados', 'Km e peças', 'Pagos', 'Todos'] as Filtro[]).map((f) => (
               <button
+                data-dica="Filtra os lançamentos pela situação."
                 key={f}
                 onClick={() => setFiltro(f)}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap ${
@@ -290,6 +293,7 @@ export const FinanceiroView: React.FC = () => {
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {ctr ? (
                         <button
+                          data-dica="Abrir o contrato ligado a esta cobrança."
                           onClick={() => navigateToContrato(ctr.id)}
                           className="inline-flex items-center gap-1 font-mono-tabular font-semibold text-[#087BFF] hover:underline"
                         >
@@ -332,6 +336,7 @@ export const FinanceiroView: React.FC = () => {
                             </a>
                           )}
                           <button
+                            data-dica="Marca esta cobrança como paga (dar baixa) quando o cliente pagar."
                             onClick={() => {
                               setFormaBaixa(pag.formaPagamento);
                               setBaixa(pag);

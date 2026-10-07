@@ -10,7 +10,6 @@ import { DashboardView } from './pages/DashboardView';
 import { FrotaView } from './pages/FrotaView';
 import { ClientesView } from './pages/ClientesView';
 import { AlugueisView } from './pages/AlugueisView';
-import { ContratosView } from './pages/ContratosView';
 import { FinanceiroView } from './pages/FinanceiroView';
 import { ManutencaoView } from './pages/ManutencaoView';
 import { ComercialView } from './pages/ComercialView';
@@ -30,8 +29,6 @@ const ActivePageRouter: React.FC = () => {
       return <ClientesView />;
     case 'alugueis':
       return <AlugueisView />;
-    case 'contratos':
-      return <ContratosView />;
     case 'financeiro':
       return <FinanceiroView />;
     case 'manutencao':
