@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ConfigSistema, EstadoSistema, PosicaoGps } from '../src/types/mkMotos';
+import type { ConfigSistema, EstadoSistema, PosicaoGps, StatusIntegracoes } from '../src/types/mkMotos';
 import { completarConfig } from '../src/lib/configPadrao';
 
 // Cada coleção é uma tabela SQLite (id + documento JSON). Os dados ficam todos
@@ -16,6 +16,7 @@ export const COLECOES = [
   'leads',
   'campanhas',
   'atividades',
+  'mensagens',
 ] as const;
 export type Colecao = (typeof COLECOES)[number];
 
@@ -34,9 +35,15 @@ export class Banco {
   readonly dados = {} as { [K in Colecao]: Doc[] };
   config!: ConfigSistema;
   private sequencia = 0;
+  /** Pasta onde ficam os comprovantes recebidos (fotos/PDF) */
+  readonly pastaComprovantes: string;
+  /** Preenchido pelo servidor: estado das integrações externas */
+  statusIntegracoes: () => StatusIntegracoes = () => ({ whatsappConfigurado: false, iaConfigurada: false, filaPendente: 0 });
 
   constructor(readonly arquivo: string) {
     fs.mkdirSync(path.dirname(arquivo), { recursive: true });
+    this.pastaComprovantes = path.join(path.dirname(arquivo), 'comprovantes');
+    fs.mkdirSync(this.pastaComprovantes, { recursive: true });
     this.db = new DatabaseSync(arquivo);
     this.criarTabelas();
     this.carregar();
@@ -130,6 +137,18 @@ export class Banco {
     this.db.prepare(`DELETE FROM ${c} WHERE id = ?`).run(id);
   }
 
+  /** Marca de migração/controle simples guardada na tabela config. */
+  meta(chave: string): string | undefined {
+    const r = this.db.prepare(`SELECT valor FROM config WHERE chave = ?`).get(`meta:${chave}`) as { valor: string } | undefined;
+    return r?.valor;
+  }
+
+  definirMeta(chave: string, valor: string) {
+    this.db
+      .prepare(`INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`)
+      .run(`meta:${chave}`, valor);
+  }
+
   salvarConfig(config: ConfigSistema) {
     this.config = config;
     this.db
@@ -169,7 +188,9 @@ export class Banco {
       leads: this.lista('leads'),
       campanhas: this.lista('campanhas'),
       atividades: this.lista<Doc>('atividades').slice(0, 200) as EstadoSistema['atividades'],
+      mensagens: this.lista<Doc>('mensagens').slice(0, 1000) as EstadoSistema['mensagens'],
       config: this.config,
+      integracoes: this.statusIntegracoes(),
     };
   }
 

@@ -21,12 +21,15 @@ import {
   ErroNegocio,
   executarRotinas,
   novoId,
+  oficinaDaOrdem,
   processarKm,
   registrarAtividade,
   registrarTrocaDePeca,
+  textoAvisoTroca,
   verificarPlanoDePecas,
 } from './automacao';
 import { carregarDemonstracao } from './demonstracao';
+import { enfileirar } from './whatsapp';
 
 export interface ResultadoAcao {
   mensagem?: string;
@@ -522,6 +525,7 @@ export const ACOES: Record<string, Acao> = {
     exigir(!item.concluida, 'Esta manutenção já foi concluída.');
     const moto = obter<Moto>(b, 'motos', item.motoId, 'Moto');
     item.concluida = true;
+    if (item.origem === 'automatica') item.situacao = 'concluida';
     item.data = hojeBR();
     if (p.custo !== undefined && p.custo !== '') item.custo = numero(p.custo, 'Custo');
     if (texto(p.oficina)) item.oficina = texto(p.oficina);
@@ -545,6 +549,77 @@ export const ACOES: Record<string, Acao> = {
       referenciaId: moto.id,
     });
     return { mensagem: 'Manutenção concluída ✓', sub: `${item.tipo} • ${moto.modelo} (${moto.status})` };
+  },
+
+  /** Comprovante conferido: conclui a troca, zera o contador da peça e avisa o cliente. */
+  aprovarComprovante(b, p) {
+    const item = obter<ManutencaoItem>(b, 'manutencoes', p.manutencaoId, 'Manutenção');
+    const comp = (item.comprovantes ?? []).find((c) => c.id === p.comprovanteId);
+    exigir(comp, 'Comprovante não encontrado.');
+    comp!.status = 'aprovado';
+    b.salvar('manutencoes', item);
+    const custo = p.custo ?? comp!.analise?.valorTotal ?? 0;
+    const r = ACOES.concluirManutencao(b, {
+      manutencaoId: item.id,
+      custo,
+      oficina: comp!.analise?.estabelecimento || item.oficina,
+      observacao: `${item.observacao} Comprovante aprovado em ${hojeBR()}.`,
+    });
+    const moto = b.lista<Moto>('motos').find((m) => m.id === item.motoId);
+    const cli = b.lista<Cliente>('clientes').find((c) => c.id === moto?.clienteAtualId);
+    if (cli) {
+      enfileirar(b, {
+        telefone: cli.telefone,
+        clienteId: cli.id,
+        motivo: 'comprovante',
+        texto: `Comprovante de ${item.tipo.toLowerCase()} aprovado. Obrigado por manter a moto ${moto?.placa ?? ''} em dia`,
+      });
+    }
+    return { ...r, mensagem: 'Comprovante aprovado e troca concluída ✓' };
+  },
+
+  recusarComprovante(b, p) {
+    const item = obter<ManutencaoItem>(b, 'manutencoes', p.manutencaoId, 'Manutenção');
+    const comp = (item.comprovantes ?? []).find((c) => c.id === p.comprovanteId);
+    exigir(comp, 'Comprovante não encontrado.');
+    const motivo = texto(p.motivo) || 'o comprovante não confere com o serviço/oficina indicados';
+    comp!.status = 'recusado';
+    comp!.motivoRecusa = motivo;
+    if (!(item.comprovantes ?? []).some((c) => c.status === 'pendente')) item.situacao = 'aguardando_comprovante';
+    b.salvar('manutencoes', item);
+    const moto = b.lista<Moto>('motos').find((m) => m.id === item.motoId);
+    const cli = b.lista<Cliente>('clientes').find((c) => c.id === moto?.clienteAtualId);
+    if (cli) {
+      enfileirar(b, {
+        telefone: cli.telefone,
+        clienteId: cli.id,
+        motivo: 'comprovante',
+        texto: `Não conseguimos aprovar o comprovante de ${item.tipo.toLowerCase()}: ${motivo}. Por favor, envie um comprovante válido da ${oficinaDaOrdem(b, item).nome}`,
+      });
+    }
+    return { mensagem: 'Comprovante recusado', sub: cli ? `${cli.nome} foi avisado pelo WhatsApp` : undefined };
+  },
+
+  reenviarAvisoTroca(b, p) {
+    const item = obter<ManutencaoItem>(b, 'manutencoes', p.manutencaoId, 'Manutenção');
+    const moto = obter<Moto>(b, 'motos', item.motoId, 'Moto');
+    const cli = b.lista<Cliente>('clientes').find((c) => c.id === moto.clienteAtualId);
+    exigir(cli, 'Esta moto não está com nenhum cliente.');
+    enfileirar(b, { telefone: cli!.telefone, clienteId: cli!.id, texto: textoAvisoTroca(b, item, moto, true), motivo: 'lembrete_troca' });
+    item.avisosEnviados = (item.avisosEnviados ?? 0) + 1;
+    item.ultimoAvisoKm = moto.kmAtual;
+    b.salvar('manutencoes', item);
+    return { mensagem: 'Aviso enviado para a fila do WhatsApp ✓', sub: cli!.nome };
+  },
+
+  enviarMensagemWhatsApp(b, p) {
+    const msg = texto(p.texto);
+    exigir(msg, 'Digite a mensagem.');
+    const cli = p.clienteId ? obter<Cliente>(b, 'clientes', p.clienteId, 'Cliente') : undefined;
+    const telefone = cli?.telefone ?? texto(p.telefone);
+    exigir(somenteDigitos(telefone).length >= 10, 'Telefone inválido.');
+    enfileirar(b, { telefone, clienteId: cli?.id, texto: msg, motivo: 'manual' });
+    return { mensagem: 'Mensagem na fila de envio ✓' };
   },
 
   // ------------------------------------------------------------- COMERCIAL
@@ -634,6 +709,12 @@ export const ACOES: Record<string, Acao> = {
     const nova = completarConfig({ ...b.config, ...(p.config ?? {}) } as ConfigSistema);
     exigir(nova.cobrancaKm.kmPorCiclo >= 100, 'O ciclo de cobrança deve ser de pelo menos 100 km.');
     exigir(nova.planoPecas.every((pc) => pc.nome && pc.intervaloKm > 0), 'Cada peça do plano precisa de nome e intervalo de km.');
+    exigir(nova.oficinas.every((o) => o.nome.trim()), 'Cada oficina precisa de um nome.');
+    exigir(
+      nova.cercaVirtual.cidades.every((c) => Number.isFinite(c.lat) && Number.isFinite(c.lon) && c.raioKm > 0),
+      'Cada cidade da área permitida precisa de localização e raio (km).'
+    );
+    exigir(!nova.cercaVirtual.ativo || nova.cercaVirtual.cidades.length > 0, 'Adicione pelo menos uma cidade para ligar a cerca virtual.');
     const novasPecas = nova.planoPecas.filter((pc) => !b.config.planoPecas.some((x) => x.id === pc.id));
     b.salvarConfig(nova);
     // Peças novas no plano começam a contar a partir da km atual de cada moto

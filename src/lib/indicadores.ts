@@ -168,6 +168,30 @@ export function calcularAlertas(e: EstadoSistema): AlertaSistema[] {
   const nomeCli = (id: string) => e.clientes.find((c) => c.id === id)?.nome ?? 'Cliente';
   const listar = (itens: string[]) => (itens.length > 3 ? `${itens.slice(0, 3).join(', ')} e mais ${itens.length - 3}` : itens.join(', '));
 
+  const foraDaArea = e.motos.filter((m) => m.foraDaArea);
+  if (foraDaArea.length) {
+    alertas.push({
+      id: 'cerca',
+      titulo: `${foraDaArea.length} moto${foraDaArea.length > 1 ? 's' : ''} fora da área permitida`,
+      detalhe: listar(foraDaArea.map((m) => `${m.placa}${m.clienteAtualId ? ` (${nomeCli(m.clienteAtualId)})` : ''}`)),
+      severidade: 'alta',
+      destinoTab: 'frota',
+    });
+  }
+
+  const paraConferir = e.manutencoes.filter((m) => !m.concluida && m.situacao === 'em_analise');
+  if (paraConferir.length) {
+    alertas.push({
+      id: 'comprovantes',
+      titulo: `${paraConferir.length} comprovante${paraConferir.length > 1 ? 's' : ''} de troca para conferir`,
+      detalhe: listar(
+        paraConferir.map((m) => `${m.tipo} ${e.motos.find((x) => x.id === m.motoId)?.placa ?? ''}`)
+      ),
+      severidade: 'media',
+      destinoTab: 'manutencao',
+    });
+  }
+
   const atrasados = e.pagamentos.filter((p) => p.status === 'Atrasado');
   if (atrasados.length) {
     const total = atrasados.reduce((s, p) => s + p.valor, 0);
@@ -207,11 +231,11 @@ export function calcularAlertas(e: EstadoSistema): AlertaSistema[] {
     });
   }
 
-  const pecas = e.manutencoes.filter((m) => !m.concluida && m.origem === 'automatica');
+  const pecas = e.manutencoes.filter((m) => !m.concluida && m.origem === 'automatica' && m.situacao !== 'em_analise');
   if (pecas.length) {
     alertas.push({
       id: 'pecas',
-      titulo: `${pecas.length} troca${pecas.length > 1 ? 's' : ''} de peça/óleo pendente${pecas.length > 1 ? 's' : ''}`,
+      titulo: `${pecas.length} troca${pecas.length > 1 ? 's' : ''} de peça/óleo aguardando o cliente`,
       detalhe: listar(
         pecas.map((m) => {
           const moto = e.motos.find((x) => x.id === m.motoId);

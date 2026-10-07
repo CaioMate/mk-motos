@@ -1,6 +1,50 @@
-import type { Moto, PosicaoGps } from '../src/types/mkMotos';
+import type { Cliente, Moto, PosicaoGps } from '../src/types/mkMotos';
+import { linkMapa } from '../src/lib/formato';
 import type { Banco } from './banco';
 import { ErroNegocio, processarKm, registrarAtividade } from './automacao';
+import { avisarDono, enfileirar } from './whatsapp';
+
+/** A moto está dentro de alguma cidade permitida? (null = cerca desligada/sem cidades) */
+export function dentroDaArea(b: Banco, p: { lat: number; lon: number }): boolean | null {
+  const { ativo, cidades } = b.config.cercaVirtual;
+  if (!ativo || !cidades.length) return null;
+  return cidades.some((c) => distanciaKm(c, p) <= c.raioKm);
+}
+
+/** Avisa cliente e dono quando a moto sai das cidades permitidas, e o dono quando ela volta. */
+function verificarCercaVirtual(b: Banco, moto: Moto, pos: PosicaoGps) {
+  const dentro = dentroDaArea(b, pos);
+  if (dentro === null) return;
+  const cliente = b.lista<Cliente>('clientes').find((c) => c.id === moto.clienteAtualId);
+  const mapa = linkMapa(pos.lat, pos.lon);
+
+  if (!dentro && !moto.foraDaArea) {
+    moto.foraDaArea = true;
+    moto.foraDaAreaDesde = pos.dataHora;
+    b.salvar('motos', moto);
+    const cidades = b.config.cercaVirtual.cidades.map((c) => c.nome).join(', ');
+    const msgDono = `ALERTA: ${moto.modelo} (${moto.placa}) saiu da área permitida${cliente ? ` com ${cliente.nome} (${cliente.telefone})` : ' (sem cliente vinculado!)'}. Localização: ${mapa}`;
+    registrarAtividade(b, { titulo: `Moto fora da área permitida — ${moto.placa}`, subtitulo: msgDono, tipo: 'gps', referenciaId: moto.id });
+    if (b.config.whatsapp.avisarCerca) {
+      avisarDono(b, msgDono);
+      if (cliente) {
+        enfileirar(b, {
+          telefone: cliente.telefone,
+          clienteId: cliente.id,
+          motivo: 'cerca',
+          texto: `Identificamos pelo rastreador que a moto ${moto.placa} está fora da área permitida no contrato (${cidades}). Por favor, retorne à área de uso e, se houver algum problema, fale com a gente por aqui`,
+        });
+      }
+    }
+  } else if (dentro && moto.foraDaArea) {
+    moto.foraDaArea = false;
+    moto.foraDaAreaDesde = undefined;
+    b.salvar('motos', moto);
+    const msg = `${moto.modelo} (${moto.placa}) voltou para a área permitida.`;
+    registrarAtividade(b, { titulo: `Moto voltou à área permitida — ${moto.placa}`, subtitulo: msg, tipo: 'gps', referenciaId: moto.id });
+    if (b.config.whatsapp.avisarCerca) avisarDono(b, msg);
+  }
+}
 
 /**
  * Formatos aceitos (todos no mesmo endereço /api/gps):
@@ -202,6 +246,7 @@ export function registrarPosicao(b: Banco, leitura: LeituraGps) {
       });
     }
     processarKm(b, moto, delta, 'gps');
+    verificarCercaVirtual(b, moto, atual);
   });
 
   return { motoId: moto.id, placa: moto.placa, kmSomados: Math.round(delta * 1000) / 1000, kmAtual: moto.kmAtual };

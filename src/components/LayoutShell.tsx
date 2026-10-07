@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ShieldCheck,
   AlertTriangle,
+  MessageCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NavTab } from '../types/mkMotos';
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItemConfig[] = [
   { id: 'manutencao', label: 'Manutenção', icon: Wrench },
   { id: 'comercial', label: 'Comercial', icon: Megaphone },
   { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { id: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 

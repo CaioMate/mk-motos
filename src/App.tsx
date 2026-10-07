@@ -16,6 +16,7 @@ import { ManutencaoView } from './pages/ManutencaoView';
 import { ComercialView } from './pages/ComercialView';
 import { RelatoriosView } from './pages/RelatoriosView';
 import { ConfiguracoesView } from './pages/ConfiguracoesView';
+import { WhatsAppView } from './pages/WhatsAppView';
 
 const ActivePageRouter: React.FC = () => {
   const { activeTab } = useApp();
@@ -39,6 +40,8 @@ const ActivePageRouter: React.FC = () => {
       return <ComercialView />;
     case 'relatorios':
       return <RelatoriosView />;
+    case 'whatsapp':
+      return <WhatsAppView />;
     case 'configuracoes':
       return <ConfiguracoesView />;
     default:

@@ -163,6 +163,11 @@ export const GlobalModals: React.FC = () => {
                           <span className="flex items-center gap-1.5 font-semibold text-slate-900">
                             <Satellite className="h-3.5 w-3.5 text-[#087BFF]" />
                             Rastreador GPS {selectedMoto.gpsImei ? `· ${selectedMoto.gpsImei}` : ''}
+                            {selectedMoto.foraDaArea && (
+                              <span className="ml-1 rounded bg-[#E50914] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                FORA DA ÁREA
+                              </span>
+                            )}
                           </span>
                           {pos && (
                             <a
@@ -702,19 +707,28 @@ export const GlobalModals: React.FC = () => {
                           , com vencimento em {config.cobrancaKm.diasParaVencimento} dias.
                         </>
                       )}{' '}
-                      O LOCATÁRIO compromete-se a apresentar a motocicleta para as trocas de óleo e peças
-                      conforme o plano de manutenção
-                      {config.planoPecas.some((p) => p.cobrarCliente && p.valorCobrado > 0) && (
-                        <>
-                          , arcando com:{' '}
-                          {config.planoPecas
-                            .filter((p) => p.cobrarCliente && p.valorCobrado > 0)
-                            .map((p) => `${p.nome} a cada ${p.intervaloKm.toLocaleString('pt-BR')} km (${brl(p.valorCobrado)})`)
-                            .join('; ')}
-                        </>
-                      )}
-                      .
+                      O LOCATÁRIO compromete-se a realizar as trocas do plano de manutenção (
+                      {config.planoPecas
+                        .filter((p) => p.exigirComprovante)
+                        .map((p) => `${p.nome.toLowerCase()} a cada ${p.intervaloKm.toLocaleString('pt-BR')} km`)
+                        .join('; ')}
+                      ) exclusivamente na oficina credenciada indicada pela LOCADORA
+                      {(() => {
+                        const of = config.oficinas.find((o) => o.id === config.oficinaPadraoId);
+                        return of ? ` (${of.nome}, ${of.endereco})` : '';
+                      })()}
+                      , e a enviar o comprovante do serviço pelo WhatsApp da LOCADORA assim que for avisado.
                     </p>
+                    {config.cercaVirtual.ativo && config.cercaVirtual.cidades.length > 0 && (
+                      <p>
+                        <strong className="text-slate-900">CLÁUSULA — DA ÁREA DE USO:</strong>{' '}
+                        A motocicleta só pode circular em:{' '}
+                        <span className="font-semibold text-slate-900">
+                          {config.cercaVirtual.cidades.map((c) => c.nome).join(', ')}
+                        </span>
+                        . A saída dessa área é detectada pelo rastreador e comunicada à LOCADORA.
+                      </p>
+                    )}
                     <p>
                       <strong className="text-slate-900">
                         CLÁUSULA TERCEIRA — DO RASTREAMENTO E USO:

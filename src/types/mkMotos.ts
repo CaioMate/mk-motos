@@ -8,6 +8,7 @@ export type NavTab =
   | 'manutencao'
   | 'comercial'
   | 'relatorios'
+  | 'whatsapp'
   | 'configuracoes';
 
 export type MotoStatus = 'ALUGADA' | 'DISPONÍVEL' | 'MANUTENÇÃO' | 'ATRASADA';
@@ -51,6 +52,70 @@ export interface ManutencaoItem {
   pecaId?: string;
   /** 'automatica' quando gerada pelo sistema ao atingir a km do plano */
   origem?: 'manual' | 'automatica';
+  /** Trocas automáticas: o cliente faz na oficina credenciada e manda o comprovante */
+  situacao?: 'aguardando_comprovante' | 'em_analise' | 'concluida';
+  oficinaId?: string;
+  comprovantes?: Comprovante[];
+  avisosEnviados?: number;
+  /** Km da moto no último aviso enviado ao cliente */
+  ultimoAvisoKm?: number;
+  /** Dono já foi avisado que passou da tolerância */
+  atrasoAvisado?: boolean;
+}
+
+export interface AnaliseComprovante {
+  ehComprovante: boolean;
+  estabelecimento: string;
+  data: string;
+  servicos: string[];
+  valorTotal: number | null;
+  km: number | null;
+  /** O estabelecimento parece ser a oficina credenciada indicada */
+  confereComOficina: boolean;
+  observacao: string;
+}
+
+export interface Comprovante {
+  id: string;
+  /** Nome do arquivo em data/comprovantes */
+  arquivo: string;
+  mime: string;
+  recebidoEm: string; // ISO
+  origem: 'whatsapp' | 'sistema';
+  status: 'pendente' | 'aprovado' | 'recusado';
+  motivoRecusa?: string;
+  analise?: AnaliseComprovante;
+}
+
+export interface Oficina {
+  id: string;
+  nome: string;
+  endereco: string;
+  telefone: string;
+}
+
+export interface CidadePermitida {
+  id: string;
+  nome: string;
+  lat: number;
+  lon: number;
+  raioKm: number;
+}
+
+export interface MensagemWhatsApp {
+  id: string;
+  telefone: string;
+  clienteId?: string;
+  direcao: 'entrada' | 'saida';
+  tipo: 'texto' | 'imagem' | 'documento' | 'audio' | 'outro';
+  texto: string;
+  arquivo?: string;
+  /** recebida (entrada) · pendente/enviada/erro (saída) */
+  status: 'recebida' | 'pendente' | 'enviada' | 'erro';
+  erro?: string;
+  motivo?: 'troca' | 'lembrete_troca' | 'cerca' | 'comprovante' | 'agente' | 'manual' | 'dono';
+  waId?: string;
+  criadoEm: string; // ISO
 }
 
 export interface PosicaoGps {
@@ -87,6 +152,9 @@ export interface Moto {
   gpsReferencia?: PosicaoGps;
   /** Km da moto na última troca de cada peça do plano (chave = id da peça) */
   pecasUltimaTrocaKm?: Record<string, number>;
+  /** Cerca virtual: moto está fora das cidades permitidas */
+  foraDaArea?: boolean;
+  foraDaAreaDesde?: string;
 }
 
 export interface Cliente {
@@ -170,9 +238,8 @@ export interface PecaPlano {
   tipo: TipoManutencao;
   /** A cada quantos km a peça deve ser trocada */
   intervaloKm: number;
-  /** Valor cobrado do cliente quando a troca vence */
-  valorCobrado: number;
-  cobrarCliente: boolean;
+  /** Quando vence, o sistema avisa o cliente e pede o comprovante (o cliente não é cobrado) */
+  exigirComprovante: boolean;
 }
 
 export interface ConfigSistema {
@@ -192,6 +259,27 @@ export interface ConfigSistema {
     diasParaVencimento: number;
   };
   planoPecas: PecaPlano[];
+  /** Oficinas/locais onde o cliente deve fazer as trocas */
+  oficinas: Oficina[];
+  oficinaPadraoId: string;
+  trocas: {
+    /** Reenviar o aviso ao cliente a cada X km sem comprovante */
+    lembreteACadaKm: number;
+    /** Passou X km do vencimento sem comprovante: avisa o dono */
+    toleranciaKm: number;
+  };
+  cercaVirtual: {
+    ativo: boolean;
+    cidades: CidadePermitida[];
+  };
+  whatsapp: {
+    /** WhatsApp do dono para receber alertas (com DDD) */
+    numeroDono: string;
+    /** O agente de IA responde as mensagens dos clientes */
+    agenteResponde: boolean;
+    avisarTrocas: boolean;
+    avisarCerca: boolean;
+  };
   gps: {
     /** Pontos que impliquem velocidade acima disso são descartados (erro de GPS) */
     velocidadeMaxKmh: number;
@@ -199,6 +287,13 @@ export interface ConfigSistema {
     distanciaMinimaM: number;
   };
   modoDemonstracao: boolean;
+}
+
+export interface StatusIntegracoes {
+  whatsappConfigurado: boolean;
+  iaConfigurada: boolean;
+  /** Mensagens pendentes de envio na fila */
+  filaPendente: number;
 }
 
 export interface Lead {
@@ -248,7 +343,9 @@ export interface EstadoSistema {
   leads: Lead[];
   campanhas: CampanhaMarketing[];
   atividades: AtividadeRecente[];
+  mensagens: MensagemWhatsApp[];
   config: ConfigSistema;
+  integracoes: StatusIntegracoes;
 }
 
 export interface AlertaSistema {

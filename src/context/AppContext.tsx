@@ -143,6 +143,12 @@ interface AppContextType {
   converterLeadEmCliente: (leadId: string) => Promise<boolean>;
   assinarContrato: (contratoId: string) => Promise<boolean>;
 
+  aprovarComprovante: (manutencaoId: string, comprovanteId: string, custo?: number) => Promise<boolean>;
+  recusarComprovante: (manutencaoId: string, comprovanteId: string, motivo: string) => Promise<boolean>;
+  anexarComprovante: (manutencaoId: string, arquivo: File) => Promise<boolean>;
+  reenviarAvisoTroca: (manutencaoId: string) => Promise<boolean>;
+  enviarMensagemWhatsApp: (payload: { clienteId?: string; telefone?: string; texto: string }) => Promise<boolean>;
+
   salvarConfig: (config: Partial<ConfigSistema>) => Promise<boolean>;
   limparDemonstracao: () => Promise<boolean>;
   restaurarDemonstracao: () => Promise<boolean>;
@@ -151,7 +157,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 async function chamarApi(nome: string, payload: unknown) {
-  const r = await fetch(`/api/acoes/${nome}`, {
+  const url = nome.startsWith('/') ? nome : `/api/acoes/${nome}`;
+  const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {}),
@@ -338,6 +345,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         moveLeadStage: (leadId, stage) => executar('moveLeadStage', { leadId, stage }),
         converterLeadEmCliente: (leadId) => executar('converterLeadEmCliente', { leadId }),
         assinarContrato: (contratoId) => executar('assinarContrato', { contratoId }),
+        aprovarComprovante: (manutencaoId, comprovanteId, custo) =>
+          executar('aprovarComprovante', { manutencaoId, comprovanteId, custo }),
+        recusarComprovante: (manutencaoId, comprovanteId, motivo) =>
+          executar('recusarComprovante', { manutencaoId, comprovanteId, motivo }),
+        anexarComprovante: async (manutencaoId, arquivo) => {
+          const base64 = await new Promise<string>((ok, falha) => {
+            const leitor = new FileReader();
+            leitor.onload = () => ok(String(leitor.result).split(',')[1] ?? '');
+            leitor.onerror = () => falha(leitor.error);
+            leitor.readAsDataURL(arquivo);
+          });
+          return executar(`/api/manutencoes/${manutencaoId}/comprovante`, { base64, mime: arquivo.type });
+        },
+        reenviarAvisoTroca: (manutencaoId) => executar('reenviarAvisoTroca', { manutencaoId }),
+        enviarMensagemWhatsApp: (payload) => executar('enviarMensagemWhatsApp', payload),
         salvarConfig: (config) => executar('salvarConfig', { config }),
         limparDemonstracao: () => executar('limparDemonstracao', {}),
         restaurarDemonstracao: () => executar('restaurarDemonstracao', {}),

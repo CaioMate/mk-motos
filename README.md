@@ -39,8 +39,32 @@ Depois, em **Configurações**, preencha:
    - soma os km rodados na moto e **no contrato do cliente atual**;
    - a cada **1.000 km** (configurável) gera uma **cobrança automática** para o cliente;
    - quando a moto atinge a km de **troca de óleo, pastilha, pneu, relação ou revisão**, abre a ordem
-     em Manutenção e (se configurado) **cobra o valor da peça do cliente**;
+     em Manutenção e **avisa o cliente pelo WhatsApp** com o endereço da **oficina credenciada**.
+     O cliente paga direto na oficina (o sistema **não cobra peças**) e manda a foto do comprovante;
+   - se a moto sair das **cidades permitidas** (cerca virtual), avisa você e o cliente na hora;
    - atualiza Dashboard, Financeiro e alertas em tempo real em todas as telas abertas.
+
+## WhatsApp e agente de IA
+
+Fluxo da troca de óleo/peças:
+
+1. GPS detecta a km da troca → ordem "Aguardando comprovante" + mensagem ao cliente com a oficina.
+2. Cliente manda a foto/PDF do comprovante no WhatsApp → o agente (Claude) lê oficina, data, serviços e valor
+   e anexa à ordem; você recebe o alerta.
+3. Você aprova em **Manutenção** (ou recusa com o motivo) → o cliente é avisado e o contador da peça zera.
+4. Sem comprovante: lembrete a cada 150 km e alerta para você ao passar de 300 km (configurável).
+
+O agente também responde às dúvidas dos clientes usando os dados de cada um (moto, contrato, pagamentos,
+trocas pendentes). Ele não negocia valores nem promete nada: passa para a equipe. Toda conversa aparece na tela **WhatsApp**,
+de onde a equipe também responde.
+
+Configuração (uma vez): **Configurações → WhatsApp e agente** tem o passo a passo. Resumo:
+- Conta Meta + app com o produto WhatsApp e um número exclusivo da empresa.
+- Copiar `.env.example` para `.env` e preencher `WHATSAPP_*` e `ANTHROPIC_API_KEY`.
+- Rodar `tunel-whatsapp.bat` (endereço HTTPS para o webhook) e cadastrar a URL na Meta.
+- Criar o modelo de mensagem `aviso_mk_motos` (necessário para avisos fora da janela de 24h).
+
+Pela internet só ficam acessíveis o webhook do WhatsApp e o GPS; o painel responde apenas na rede local.
 
 Formatos aceitos no mesmo endereço:
 

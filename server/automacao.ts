@@ -5,6 +5,7 @@ import type {
   Contrato,
   ManutencaoItem,
   Moto,
+  Oficina,
   Pagamento,
 } from '../src/types/mkMotos';
 import {
@@ -18,11 +19,12 @@ import {
 } from '../src/lib/datas';
 import { brl } from '../src/lib/formato';
 import type { Banco } from './banco';
+import { avisarDono, enfileirar } from './whatsapp';
 
 export class ErroNegocio extends Error {}
 
-export const novoId = (prefixo: string) =>
-  `${prefixo}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+export { novoId } from './util';
+import { novoId } from './util';
 
 const arred = (v: number) => Math.round(v * 10) / 10;
 
@@ -139,10 +141,28 @@ function cobrarCiclosDeKm(b: Banco, contrato: Contrato, moto: Moto) {
   b.salvar('contratos', contrato);
 }
 
-/** Quando uma peça do plano atinge o intervalo de km, abre a ordem de serviço e cobra o cliente. */
+export function oficinaDaOrdem(b: Banco, item?: Pick<ManutencaoItem, 'oficinaId'>): Oficina {
+  const ofs = b.config.oficinas;
+  return ofs.find((o) => o.id === item?.oficinaId) ?? ofs.find((o) => o.id === b.config.oficinaPadraoId) ?? ofs[0];
+}
+
+/** Mensagem de WhatsApp para o cliente fazer a troca na oficina credenciada e mandar o comprovante. */
+export function textoAvisoTroca(b: Banco, item: ManutencaoItem, moto: Moto, lembrete: boolean): string {
+  const peca = b.config.planoPecas.find((p) => p.id === item.pecaId);
+  const oficina = oficinaDaOrdem(b, item);
+  const servico = peca?.nome ?? item.tipo;
+  return (
+    `${lembrete ? 'Lembrete: ainda não recebemos o comprovante da' : 'Sua moto'} ${lembrete ? servico.toLowerCase() : `${moto.modelo} (${moto.placa}) chegou a ${Math.round(moto.kmAtual).toLocaleString('pt-BR')} km e precisa de ${servico.toLowerCase()}`}. ` +
+    `Faça o serviço na ${oficina.nome} (${oficina.endereco}${oficina.telefone ? `, tel. ${oficina.telefone}` : ''}) ` +
+    'e envie a foto do comprovante respondendo esta mensagem'
+  );
+}
+
+/** Quando uma peça do plano atinge o intervalo de km, abre a ordem e avisa o cliente (sem cobrar). */
 export function verificarPlanoDePecas(b: Banco, moto: Moto) {
   const ultimas = moto.pecasUltimaTrocaKm ?? {};
   const manutencoes = b.lista<ManutencaoItem>('manutencoes');
+  const cliente = b.lista<Cliente>('clientes').find((c) => c.id === moto.clienteAtualId);
   for (const peca of b.config.planoPecas) {
     if (!(peca.intervaloKm > 0)) continue;
     const base = ultimas[peca.id];
@@ -154,34 +174,33 @@ export function verificarPlanoDePecas(b: Banco, moto: Moto) {
     );
     if (jaAberta) continue;
 
-    b.salvar<ManutencaoItem>('manutencoes', {
+    const item = b.salvar<ManutencaoItem>('manutencoes', {
       id: novoId('man'),
       motoId: moto.id,
       tipo: peca.tipo,
       pecaId: peca.id,
       origem: 'automatica',
+      situacao: 'aguardando_comprovante',
+      oficinaId: b.config.oficinaPadraoId,
       data: hojeBR(),
       kmNaManutencao: moto.kmAtual,
       custo: 0,
-      oficina: '',
+      oficina: oficinaDaOrdem(b).nome,
       observacao: `${peca.nome}: ${Math.round(rodado).toLocaleString('pt-BR')} km desde a última troca (intervalo de ${peca.intervaloKm.toLocaleString('pt-BR')} km).`,
       concluida: false,
+      comprovantes: [],
+      avisosEnviados: 0,
     });
 
-    const contrato = b
-      .lista<Contrato>('contratos')
-      .find((c) => c.id === moto.contratoAtualId && c.status !== 'Finalizado');
-    let complemento = 'Sem cliente vinculado — sem cobrança.';
-    if (contrato && peca.cobrarCliente && peca.valorCobrado > 0) {
-      const hoje = new Date();
-      novaCobranca(b, contrato, {
-        tipo: 'Peças / Manutenção',
-        descricao: `${peca.nome} — ${moto.modelo} (${moto.placa}) aos ${Math.round(moto.kmAtual).toLocaleString('pt-BR')} km`,
-        competencia: competenciaDe(hoje),
-        valor: peca.valorCobrado,
-        vencimento: formatBR(somarDias(hoje, b.config.cobrancaKm.diasParaVencimento)),
-      });
-      complemento = `Cobrança de ${brl(peca.valorCobrado)} gerada para o cliente.`;
+    let complemento = 'Moto sem cliente — fazer a troca no pátio.';
+    if (cliente && peca.exigirComprovante && b.config.whatsapp.avisarTrocas) {
+      enfileirar(b, { telefone: cliente.telefone, clienteId: cliente.id, texto: textoAvisoTroca(b, item, moto, false), motivo: 'troca' });
+      item.avisosEnviados = 1;
+      item.ultimoAvisoKm = moto.kmAtual;
+      b.salvar('manutencoes', item);
+      complemento = `${cliente.nome} foi avisado pelo WhatsApp para trocar na oficina credenciada e enviar o comprovante.`;
+    } else if (cliente) {
+      complemento = `Cliente: ${cliente.nome}. Aguardando comprovante.`;
     }
     registrarAtividade(b, {
       titulo: `Troca necessária: ${peca.nome} — ${moto.modelo}`,
@@ -189,6 +208,35 @@ export function verificarPlanoDePecas(b: Banco, moto: Moto) {
       tipo: 'manutencao',
       referenciaId: moto.id,
     });
+  }
+  lembrarTrocasPendentes(b, moto, cliente);
+}
+
+/** Reenvia o aviso a cada X km sem comprovante e avisa o dono quando passa da tolerância. */
+function lembrarTrocasPendentes(b: Banco, moto: Moto, cliente: Cliente | undefined) {
+  const { lembreteACadaKm, toleranciaKm } = b.config.trocas;
+  for (const item of b.lista<ManutencaoItem>('manutencoes')) {
+    if (item.motoId !== moto.id || item.concluida || item.origem !== 'automatica') continue;
+    if (item.situacao === 'em_analise') continue; // comprovante já chegou, aguardando o dono
+    const peca = b.config.planoPecas.find((p) => p.id === item.pecaId);
+    if (!peca?.exigirComprovante) continue;
+
+    if (cliente && b.config.whatsapp.avisarTrocas && lembreteACadaKm > 0 &&
+        moto.kmAtual - (item.ultimoAvisoKm ?? item.kmNaManutencao) >= lembreteACadaKm) {
+      enfileirar(b, { telefone: cliente.telefone, clienteId: cliente.id, texto: textoAvisoTroca(b, item, moto, true), motivo: 'lembrete_troca' });
+      item.avisosEnviados = (item.avisosEnviados ?? 0) + 1;
+      item.ultimoAvisoKm = moto.kmAtual;
+      b.salvar('manutencoes', item);
+    }
+
+    const passou = moto.kmAtual - item.kmNaManutencao;
+    if (!item.atrasoAvisado && toleranciaKm > 0 && passou >= toleranciaKm) {
+      item.atrasoAvisado = true;
+      b.salvar('manutencoes', item);
+      const msg = `${peca.nome} da ${moto.modelo} (${moto.placa}) está atrasada: ${Math.round(passou)} km além do prazo, sem comprovante${cliente ? ` (cliente ${cliente.nome}, ${cliente.telefone})` : ''}`;
+      registrarAtividade(b, { titulo: 'Troca atrasada sem comprovante', subtitulo: msg, tipo: 'manutencao', referenciaId: moto.id });
+      avisarDono(b, msg);
+    }
   }
 }
 
@@ -327,6 +375,25 @@ function sincronizarStatus(b: Banco) {
       proximoPagamentoData: proxData,
       proximoPagamentoValor: emAberto.filter((p) => p.vencimento === proxData).reduce((s, p) => s + p.valor, 0),
     });
+  }
+}
+
+/** Ajustes únicos em bancos criados por versões anteriores. Roda ao iniciar o servidor. */
+export function migrarDados(b: Banco) {
+  if (!b.meta('pecas-sem-cobranca')) {
+    // Regra nova: o cliente não paga peças/óleo (troca na oficina credenciada e manda comprovante).
+    for (const p of [...b.lista<Pagamento>('pagamentos')]) {
+      if (p.tipo === 'Peças / Manutenção' && p.status !== 'Pago') b.remover('pagamentos', p.id);
+    }
+    for (const m of b.lista<ManutencaoItem>('manutencoes')) {
+      if (m.origem === 'automatica' && !m.concluida && !m.situacao) {
+        m.situacao = 'aguardando_comprovante';
+        m.oficinaId = b.config.oficinaPadraoId;
+        m.comprovantes = m.comprovantes ?? [];
+        b.salvar('manutencoes', m);
+      }
+    }
+    b.definirMeta('pecas-sem-cobranca', new Date().toISOString());
   }
 }
 

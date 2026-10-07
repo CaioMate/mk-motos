@@ -4,10 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Banco } from './banco';
-import { ErroNegocio, executarRotinas } from './automacao';
+import { ErroNegocio, executarRotinas, migrarDados } from './automacao';
 import { executarAcao } from './acoes';
 import { carregarDemonstracao } from './demonstracao';
 import { normalizarLeitura, rastreadoresDesconhecidos, registrarPosicao } from './gps';
+import { assinaturaValida, filaPendente, processarFila, tokenVerificacao, whatsappConfigurado } from './whatsapp';
+import { iaConfigurada } from './agente';
+import { processarWebhook, registrarComprovante } from './atendimento';
+import type { ManutencaoItem } from '../src/types/mkMotos';
 
 const RAIZ = path.resolve(import.meta.dirname, '..');
 if (fs.existsSync(path.join(RAIZ, '.env'))) process.loadEnvFile(path.join(RAIZ, '.env'));
@@ -22,7 +26,15 @@ if (banco.vazio()) {
   console.log('Primeiro uso: carregando dados de demonstração (apague em Configurações > Banco de dados).');
   banco.transacao(() => carregarDemonstracao(banco));
 }
-banco.transacao(() => executarRotinas(banco));
+banco.transacao(() => {
+  migrarDados(banco);
+  executarRotinas(banco);
+});
+banco.statusIntegracoes = () => ({
+  whatsappConfigurado: whatsappConfigurado(),
+  iaConfigurada: iaConfigurada(),
+  filaPendente: filaPendente(banco),
+});
 
 // ---------------------------------------------------------------- tempo real (SSE)
 const ouvintes = new Set<Response>();
@@ -44,10 +56,34 @@ setInterval(() => {
   }
 }, 15 * 60_000);
 
+// Fila do WhatsApp: envia as mensagens pendentes a cada 5 segundos
+setInterval(() => {
+  processarFila(banco, notificarMudanca).catch((e) => console.error('Erro na fila do WhatsApp:', e));
+}, 5_000);
+
 // ---------------------------------------------------------------- API
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '2mb' }));
+
+// Acesso vindo da internet (túnel Cloudflare/ngrok/proxy): só o webhook do WhatsApp e o GPS ficam abertos.
+// O painel, com dados de clientes, só abre na rede local.
+const ROTAS_PUBLICAS = [/^\/api\/whatsapp\/webhook\b/, /^\/api\/gps(\/(osmand|traccar))?\/?$/];
+app.use((req, res, next) => {
+  const viaInternet = !!(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.headers['cf-ray']);
+  if (viaInternet && !ROTAS_PUBLICAS.some((r) => r.test(req.path))) {
+    return res.status(403).send('Acesso ao painel permitido somente pela rede local.');
+  }
+  next();
+});
+
+app.use(
+  express.json({
+    limit: '15mb',
+    verify: (req, _res, buf) => {
+      (req as Request & { corpoBruto?: Buffer }).corpoBruto = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 const api = express.Router();
@@ -103,6 +139,50 @@ const receberGps = (req: Request, res: Response) => {
 api.all('/gps', receberGps);
 api.all('/gps/osmand', receberGps);
 api.post('/gps/traccar', receberGps);
+
+// ---------------------------------------------------------------- WhatsApp (Meta Cloud API)
+api.get('/whatsapp/webhook', (req, res) => {
+  const ok = req.query['hub.mode'] === 'subscribe' && tokenVerificacao() && req.query['hub.verify_token'] === tokenVerificacao();
+  if (ok) return res.status(200).send(String(req.query['hub.challenge'] ?? ''));
+  res.sendStatus(403);
+});
+
+api.post('/whatsapp/webhook', (req, res) => {
+  const corpoBruto = (req as Request & { corpoBruto?: Buffer }).corpoBruto;
+  if (!assinaturaValida(corpoBruto, req.header('x-hub-signature-256'))) return res.sendStatus(401);
+  res.sendStatus(200); // a Meta exige resposta rápida; o processamento continua em segundo plano
+  processarWebhook(banco, req.body, notificarMudanca).catch((e) => console.error('[WhatsApp] webhook:', e));
+});
+
+// Comprovantes (fotos/PDF) — só pela rede local
+api.get('/comprovantes/:arquivo', (req, res) => {
+  const nome = path.basename(req.params.arquivo);
+  const caminho = path.join(banco.pastaComprovantes, nome);
+  if (!/^[\w-]+\.(jpg|png|webp|gif|pdf)$/.test(nome) || !fs.existsSync(caminho)) return res.sendStatus(404);
+  res.sendFile(caminho);
+});
+
+// Anexar comprovante pelo sistema (upload em base64)
+api.post('/manutencoes/:id/comprovante', async (req, res) => {
+  try {
+    const item = banco.lista<ManutencaoItem>('manutencoes').find((m) => m.id === req.params.id);
+    if (!item) throw new ErroNegocio('Manutenção não encontrada.');
+    const { base64, mime } = req.body as { base64?: string; mime?: string };
+    if (!base64 || !mime) throw new ErroNegocio('Arquivo não enviado.');
+    const comp = await registrarComprovante(banco, item, Buffer.from(base64, 'base64'), mime, 'sistema');
+    notificarMudanca();
+    res.json({
+      mensagem: 'Comprovante anexado ✓',
+      sub: comp.analise ? `Leitura automática: ${comp.analise.observacao}` : 'Confira e aprove na ordem de serviço',
+      estado: banco.estado(),
+    });
+  } catch (e) {
+    if (e instanceof Error && !(e instanceof ErroNegocio) && e.message.startsWith('Envie o comprovante')) {
+      return res.status(400).json({ erro: e.message });
+    }
+    responderErro(res, e);
+  }
+});
 
 api.get('/gps/desconhecidos', (_req, res) => {
   res.json([...rastreadoresDesconhecidos.entries()].map(([id, v]) => ({ id, ...v })));
@@ -168,5 +248,7 @@ servidor.listen(PORTA, '0.0.0.0', () => {
   for (const ip of enderecosLocais()) console.log(`  Na rede local:      http://${ip}:${PORTA}`);
   console.log(`  Endereço do GPS:    http://<IP-acima>:${PORTA}/api/gps`);
   console.log(`  Banco de dados:     ${ARQUIVO_BANCO}`);
+  console.log(`  WhatsApp (Meta):    ${whatsappConfigurado() ? 'configurado' : 'não configurado (veja Configurações > WhatsApp)'}`);
+  console.log(`  Agente de IA:       ${iaConfigurada() ? 'configurado' : 'não configurado (ANTHROPIC_API_KEY)'}`);
   console.log('');
 });

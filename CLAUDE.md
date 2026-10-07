@@ -22,6 +22,18 @@ Originalmente gerado no Google AI Studio como protótipo só de front-end; agora
 - Km → `processarKm()` soma na moto e no contrato, cobra ciclos (`config.cobrancaKm`) e abre trocas do
   `config.planoPecas` (contador por peça em `moto.pecasUltimaTrocaKm`).
 
+- Peças/óleo NÃO geram cobrança (regra do dono): ordem automática com `situacao` aguardando_comprovante →
+  em_analise → concluida. Aviso/lembrete ao cliente via `enfileirar()` (server/whatsapp.ts).
+- WhatsApp: API oficial da Meta. Mensagens de saída são gravadas como `pendente` dentro da transação e
+  enviadas por `processarFila()` (a cada 5 s, fora da transação). Fora da janela de 24h usa o modelo
+  `WHATSAPP_TEMPLATE` (3 parâmetros: nome, empresa, texto). Webhook em `/api/whatsapp/webhook` (assinatura
+  X-Hub-Signature-256 com `WHATSAPP_APP_SECRET`); processamento em `server/atendimento.ts`.
+- Agente (server/agente.ts): Claude `claude-opus-5-5`; comprovante via `messages.parse` + zod; respostas via
+  `beta.messages.create` com `fallbacks: 'default'`. Sem `ANTHROPIC_API_KEY` usa respostas fixas.
+- Cerca virtual: `config.cercaVirtual.cidades` (centro + raio), checada em `registrarPosicao`; `moto.foraDaArea`.
+- Requisições com cabeçalho de proxy (`cf-connecting-ip`/`x-forwarded-for`) só acessam webhook e GPS.
+- Telefones comparados por `chaveTelefone()` (DDD + últimos 8 dígitos) por causa do 9º dígito.
+
 ## Convenções
 - Datas sempre `dd/mm/aaaa` (helpers em `src/lib/datas.ts`); timestamps de atividade em ISO (`criadoEm`).
 - Dinheiro: `brl()` de `src/lib/formato.ts`. Indicadores/alertas: `src/lib/indicadores.ts` (nunca números fixos).
