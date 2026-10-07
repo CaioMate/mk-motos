@@ -4,34 +4,25 @@ Sistema de locação de motos (React 19 + Vite 8 + Tailwind 4 no front; Express 
 Originalmente gerado no Google AI Studio como protótipo só de front-end; agora tem servidor e banco reais.
 O dono da locadora não é programador: fale com ele em português simples, com passo a passo.
 
-## Equipe de agentes — DELEGUE PRIMEIRO (economia de tokens)
-Regra: tarefas simples ou médias vão para um subagente (`.claude/agents/`), que roda em modelo mais barato
-e com contexto próprio. O agente principal só coordena, decide e conversa com o dono. Faça você mesmo apenas
-quando for mais barato que explicar (ex.: editar 1–2 linhas já vistas) ou quando exigir a conversa inteira.
-Tarefas independentes: dispare os subagentes em paralelo, na mesma mensagem. Passe a eles só o necessário
-(arquivo, objetivo, restrições) — eles não veem esta conversa.
+A equipe de agentes é global (`~/.claude/agents`, regras em `~/.claude/CLAUDE.md`); aqui ficam só as notas deste projeto.
 
-| Situação | Subagente | Modelo |
-|---|---|---|
-| Achar onde algo está no código | `explorador` | haiku |
-| Regra de negócio, ações, banco, rotinas (server/) | `dev-backend` | sonnet |
-| Telas, modais, visual, `data-dica` (src/) | `dev-frontend` | sonnet |
-| GPS, km, cobrança por km, peças/óleo, cerca virtual | `especialista-gps` | sonnet |
-| WhatsApp (Meta), robô de atendimento, IA Claude | `especialista-whatsapp-ia` | sonnet |
-| Testar (lint, build, servidor de teste, curl) — após toda mudança | `testador` | haiku |
-| Revisar o diff antes de publicar (mudanças médias/grandes) | `revisor` | sonnet |
-| Segurança, LGPD, exposição na internet | `seguranca-lgpd` | sonnet |
-| README, CLAUDE.md, guias, textos de tela | `documentador` | haiku |
-| Windows, .bat, firewall, túnel, backup, instalação | `devops-windows` | haiku |
-| Dúvida do dono sobre como usar o sistema | `suporte-dono` | haiku |
-| Funcionalidade grande / várias áreas / sistema novo → plano | `arquiteto` | opus |
-| Agente errou, gastou demais ou revisão periódica | `aperfeicoador-agentes` | opus |
-
-Skills (procedimentos, `/nome`): `/nova-acao`, `/nova-tela`, `/verificar`, `/publicar`, `/backup-banco`,
-`/novo-sistema`, `/melhorar-agentes`.
-
-Fluxo padrão: (complexo? `arquiteto`) → agente(s) da área → `testador` → (`revisor` se médio/grande) → `/publicar`.
-Se um subagente falhar duas vezes na mesma coisa, resolva você e chame `aperfeicoador-agentes` com o ocorrido.
+## Notas para os agentes
+- dev-backend: nova operação = função em `ACOES` (`server/acoes.ts`), `(b, p) => ResultadoAcao`; valide com
+  `exigir()`/`texto()`/`numero()`/`obter()`; IDs com `novoId('prefixo')`; `registrarAtividade()` no histórico.
+  Exponha no front em `src/context/AppContext.tsx` (`executar('nome', payload)`).
+- dev-frontend: nova aba = `NavTab` (`src/types/mkMotos.ts`) + item com `dica` em `LayoutShell.tsx` + `case` em `App.tsx`.
+  Dados só via `useApp()`. Ícones `lucide-react`, animações `motion`.
+- banco-dados: não há SQL por tabela — `server/banco.ts` guarda cada documento como JSON no SQLite; novas
+  coleções/campos = tipos em `src/types/mkMotos.ts` + `Banco`. Dados de demonstração em `server/demonstracao.ts`.
+- integracoes: GPS em `server/gps.ts` + `processarKm()`; WhatsApp em `server/whatsapp.ts`/`atendimento.ts`;
+  IA em `server/agente.ts` (sem `ANTHROPIC_API_KEY` deve continuar funcionando). Nunca cobrar km duplicado.
+- testador: `npm run lint` → `npm run build` → `MKMOTOS_DB="$TEMP/mk-teste.db" PORT=8099 npm run dev` e
+  `curl` em `/api/estado` e `POST /api/acoes/<nome>` (dado inválido → 400 `{ erro }`). Nunca `data/mkmotos.db`.
+- seguranca: painel sem login (só rede local); `/api/backup` entrega o banco inteiro; uploads de comprovantes
+  em `/api/manutencoes/:id/comprovante`.
+- devops: scripts `iniciar-mk-motos.bat`, `liberar-firewall.bat`, `tunel-whatsapp.bat`. Backup = copiar
+  `data/mkmotos.db` com o servidor parado, ou `GET /api/backup`.
+- publicar: o dono autorizou commit + push sem perguntar.
 
 ## Comandos
 - `npm run dev` — Express na porta 8000 com Vite em middleware (HMR). Não use `vite` direto: a API não sobe.
