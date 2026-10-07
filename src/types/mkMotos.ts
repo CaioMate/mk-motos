@@ -29,16 +29,36 @@ export type LeadStage =
 
 export type LeadOrigin = 'Instagram' | 'WhatsApp' | 'Google' | 'Indicação' | 'Anúncios';
 
+export type TipoManutencao =
+  | 'Troca de óleo'
+  | 'Pneu'
+  | 'Freio'
+  | 'Relação'
+  | 'Revisão'
+  | 'Manutenção preventiva';
+
 export interface ManutencaoItem {
   id: string;
   motoId: string;
-  tipo: 'Troca de óleo' | 'Pneu' | 'Freio' | 'Revisão' | 'Manutenção preventiva';
+  tipo: TipoManutencao;
   data: string;
   kmNaManutencao: number;
   custo: number;
   oficina: string;
   observacao: string;
   concluida: boolean;
+  /** Item do plano de peças que esta manutenção atende (zera o contador daquela peça) */
+  pecaId?: string;
+  /** 'automatica' quando gerada pelo sistema ao atingir a km do plano */
+  origem?: 'manual' | 'automatica';
+}
+
+export interface PosicaoGps {
+  lat: number;
+  lon: number;
+  velocidadeKmh?: number;
+  dataHora: string; // ISO
+  odometroKm?: number;
 }
 
 export interface Moto {
@@ -60,6 +80,13 @@ export interface Moto {
   foto: string;
   clienteAtualId?: string;
   contratoAtualId?: string;
+  /** IMEI / identificador do rastreador GPS instalado na moto */
+  gpsImei?: string;
+  gpsUltimaPosicao?: PosicaoGps;
+  /** Ponto de referência usado para somar a distância percorrida */
+  gpsReferencia?: PosicaoGps;
+  /** Km da moto na última troca de cada peça do plano (chave = id da peça) */
+  pecasUltimaTrocaKm?: Record<string, number>;
 }
 
 export interface Cliente {
@@ -108,7 +135,18 @@ export interface Contrato {
   caucao: number;
   franquiaKmMensal: number;
   status: ContratoStatus;
+  plano?: 'Semanal' | 'Mensal' | 'Anual';
+  /** Km da moto no início do contrato */
+  kmInicial?: number;
+  /** Km rodados com o cliente neste contrato (somados pelo GPS / leituras de hodômetro) */
+  kmRodados?: number;
+  /** Quantos ciclos de km (ex.: a cada 1.000 km) já foram cobrados */
+  kmCiclosCobrados?: number;
 }
+
+export type FormaPagamento = 'PIX' | 'Boleto' | 'Cartão' | 'Transferência';
+
+export type TipoCobranca = 'Mensalidade' | 'Km rodado' | 'Peças / Manutenção' | 'Avulso';
 
 export interface Pagamento {
   id: string;
@@ -117,10 +155,50 @@ export interface Pagamento {
   motoId: string;
   competencia: string;
   valor: number;
+  /** dd/mm/aaaa */
   vencimento: string;
   dataPagamento?: string;
-  formaPagamento: 'PIX' | 'Boleto' | 'Cartão' | 'Transferência';
+  formaPagamento: FormaPagamento;
   status: PagamentoStatus;
+  tipo?: TipoCobranca;
+  descricao?: string;
+}
+
+export interface PecaPlano {
+  id: string;
+  nome: string;
+  tipo: TipoManutencao;
+  /** A cada quantos km a peça deve ser trocada */
+  intervaloKm: number;
+  /** Valor cobrado do cliente quando a troca vence */
+  valorCobrado: number;
+  cobrarCliente: boolean;
+}
+
+export interface ConfigSistema {
+  empresa: {
+    nome: string;
+    cnpj: string;
+    telefone: string;
+    pix: string;
+  };
+  cicloRevisaoKm: number;
+  caucaoPadrao: number;
+  diasAvisoVencimento: number;
+  cobrancaKm: {
+    ativo: boolean;
+    kmPorCiclo: number;
+    valorPorCiclo: number;
+    diasParaVencimento: number;
+  };
+  planoPecas: PecaPlano[];
+  gps: {
+    /** Pontos que impliquem velocidade acima disso são descartados (erro de GPS) */
+    velocidadeMaxKmh: number;
+    /** Movimentos menores que isso são considerados ruído do GPS */
+    distanciaMinimaM: number;
+  };
+  modoDemonstracao: boolean;
 }
 
 export interface Lead {
@@ -153,8 +231,24 @@ export interface AtividadeRecente {
   titulo: string;
   subtitulo: string;
   horario: string;
-  tipo: 'aluguel' | 'pagamento' | 'manutencao' | 'cliente' | 'comercial';
+  tipo: 'aluguel' | 'pagamento' | 'manutencao' | 'cliente' | 'comercial' | 'gps';
   referenciaId?: string;
+  /** ISO — quando existir, o horário é calculado ("Há 5 min") */
+  criadoEm?: string;
+}
+
+/** Tudo o que o servidor devolve para a tela */
+export interface EstadoSistema {
+  motos: Moto[];
+  clientes: Cliente[];
+  alugueis: Aluguel[];
+  contratos: Contrato[];
+  pagamentos: Pagamento[];
+  manutencoes: ManutencaoItem[];
+  leads: Lead[];
+  campanhas: CampanhaMarketing[];
+  atividades: AtividadeRecente[];
+  config: ConfigSistema;
 }
 
 export interface AlertaSistema {

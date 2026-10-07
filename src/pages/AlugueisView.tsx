@@ -9,6 +9,9 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { formatBR, somarMeses } from '../lib/datas';
+import { brl } from '../lib/formato';
+import { FormaPagamento } from '../types/mkMotos';
 
 type AluguelFilter = 'Todos' | 'Ativos' | 'Próximos' | 'Finalizados' | 'Atrasados';
 
@@ -32,27 +35,57 @@ export const AlugueisView: React.FC = () => {
     navigateToContrato,
     createFullAluguel,
     finalizarAluguel,
+    config,
   } = useApp();
 
   const [filter, setFilter] = useState<AluguelFilter>('Todos');
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState(1);
+  const [salvando, setSalvando] = useState(false);
 
   // Wizard State (7 etapas)
-  const [selectedClienteId, setSelectedClienteId] = useState<string>(clientes[0]?.id || 'cli-1');
+  const clientesLivres = clientes.filter((c) => !c.contratoAtualId);
   const availableMotos = motos.filter((m) => m.status === 'DISPONÍVEL');
-  const [selectedMotoId, setSelectedMotoId] = useState<string>(
-    availableMotos[0]?.id || motos[1]?.id || 'moto-2'
-  );
+  const [selectedClienteId, setSelectedClienteId] = useState<string>('');
+  const [selectedMotoId, setSelectedMotoId] = useState<string>('');
   const [plano, setPlano] = useState<'Semanal' | 'Mensal' | 'Anual'>('Mensal');
-  const [dataInicio, setDataInicio] = useState('01/10/2026');
-  const [dataPrevista, setDataPrevista] = useState('01/04/2027');
-  const [valorMensal, setValorMensal] = useState(780);
-  const [caucao, setCaucao] = useState(500);
-  const [formaPagamento, setFormaPagamento] = useState<
-    'PIX' | 'Boleto' | 'Cartão' | 'Transferência'
-  >('PIX');
+  const [dataInicio, setDataInicio] = useState(formatBR(new Date()));
+  const [dataPrevista, setDataPrevista] = useState(formatBR(somarMeses(new Date(), 6)));
+  const [valorMensal, setValorMensal] = useState(0);
+  const [caucao, setCaucao] = useState(config.caucaoPadrao);
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('PIX');
   const [pagamentoConfirmado, setPagamentoConfirmado] = useState(true);
+
+  const valorDoPlano = (motoId: string, p: typeof plano) => {
+    const m = motos.find((x) => x.id === motoId);
+    if (!m) return 0;
+    return p === 'Semanal' ? m.valorSemanal : m.valorMensal;
+  };
+
+  const abrirWizard = () => {
+    const moto = availableMotos[0];
+    setSelectedClienteId(clientesLivres[0]?.id ?? '');
+    setSelectedMotoId(moto?.id ?? '');
+    setPlano('Mensal');
+    setValorMensal(moto?.valorMensal ?? 0);
+    setDataInicio(formatBR(new Date()));
+    setDataPrevista(formatBR(somarMeses(new Date(), 6)));
+    setCaucao(config.caucaoPadrao);
+    setPagamentoConfirmado(true);
+    setStep(1);
+    setWizardOpen(true);
+  };
+
+  const handleFinalizar = async (aluguelId: string, motoId: string) => {
+    const moto = motos.find((m) => m.id === motoId);
+    const resposta = window.prompt(
+      'Finalizar aluguel e liberar a moto.\n\nKm no painel da moto na devolução (deixe como está se não souber):',
+      moto ? String(Math.round(moto.kmAtual)) : ''
+    );
+    if (resposta === null) return;
+    const km = Number(resposta.replace(/\D/g, ''));
+    await finalizarAluguel(aluguelId, resposta.trim() && km > 0 ? km : undefined);
+  };
 
   const filteredAlugueis = alugueis.filter((a) => {
     if (filter === 'Todos') return true;
@@ -63,8 +96,9 @@ export const AlugueisView: React.FC = () => {
     return true;
   });
 
-  const handleSaveAluguel = () => {
-    createFullAluguel({
+  const handleSaveAluguel = async () => {
+    setSalvando(true);
+    const ok = await createFullAluguel({
       clienteId: selectedClienteId,
       motoId: selectedMotoId,
       dataInicio,
@@ -75,8 +109,11 @@ export const AlugueisView: React.FC = () => {
       formaPagamento,
       pagamentoConfirmado,
     });
-    setWizardOpen(false);
-    setStep(1);
+    setSalvando(false);
+    if (ok) {
+      setWizardOpen(false);
+      setStep(1);
+    }
   };
 
   const chosenCli = clientes.find((c) => c.id === selectedClienteId);
@@ -99,10 +136,7 @@ export const AlugueisView: React.FC = () => {
         </div>
 
         <button
-          onClick={() => {
-            setStep(1);
-            setWizardOpen(true);
-          }}
+          onClick={abrirWizard}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
         >
           <Plus className="h-4 w-4" />
@@ -202,7 +236,7 @@ export const AlugueisView: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-mono-tabular font-bold text-slate-900 whitespace-nowrap">
-                      R$ {alu.valorMensal.toLocaleString('pt-BR')}/mês
+                      {brl(alu.valorMensal)}/{alu.plano === 'Semanal' ? 'semana' : 'mês'}
                     </td>
 
                     <td className="py-3.5 px-4 whitespace-nowrap">
@@ -220,7 +254,7 @@ export const AlugueisView: React.FC = () => {
                         </button>
                         {alu.status !== 'Finalizado' && (
                           <button
-                            onClick={() => finalizarAluguel(alu.id)}
+                            onClick={() => handleFinalizar(alu.id, alu.motoId)}
                             className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:border-[#E50914] hover:text-[#E50914] transition-colors"
                           >
                             Finalizar aluguel
@@ -289,8 +323,13 @@ export const AlugueisView: React.FC = () => {
                   <h3 className="text-sm font-bold text-slate-900">
                     ETAPA 1 — Selecionar cliente para a locação
                   </h3>
+                  {clientesLivres.length === 0 && (
+                    <p className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                      Nenhum cliente sem aluguel ativo. Cadastre um cliente em Clientes primeiro.
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-56 overflow-y-auto">
-                    {clientes.map((c) => (
+                    {clientesLivres.map((c) => (
                       <button
                         key={c.id}
                         type="button"
@@ -303,8 +342,13 @@ export const AlugueisView: React.FC = () => {
                       >
                         <p className="text-xs font-bold text-slate-900">{c.nome}</p>
                         <p className="text-[11px] text-slate-500 font-mono-tabular mt-0.5">
-                          {c.telefone} · CNH {c.cnh}
+                          {c.telefone} · CNH {c.cnh || '—'}
                         </p>
+                        {!c.cpf && (
+                          <p className="text-[11px] font-semibold text-amber-600 mt-0.5">
+                            Sem CPF — complete o cadastro antes
+                          </p>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -316,14 +360,19 @@ export const AlugueisView: React.FC = () => {
                   <h3 className="text-sm font-bold text-slate-900">
                     ETAPA 2 — Selecionar motocicleta da frota
                   </h3>
+                  {availableMotos.length === 0 && (
+                    <p className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                      Nenhuma moto disponível no momento.
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-56 overflow-y-auto">
-                    {motos.map((m) => (
+                    {availableMotos.map((m) => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => {
                           setSelectedMotoId(m.id);
-                          setValorMensal(m.valorMensal);
+                          setValorMensal(valorDoPlano(m.id, plano));
                         }}
                         className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all ${
                           selectedMotoId === m.id
@@ -340,7 +389,7 @@ export const AlugueisView: React.FC = () => {
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-slate-900 truncate">{m.modelo}</p>
                           <p className="text-[11px] text-slate-500 font-mono-tabular">
-                            {m.placa} · R$ {m.valorMensal}/mês · {m.status}
+                            {m.placa} · {brl(m.valorMensal)}/mês · {Math.round(m.kmAtual).toLocaleString('pt-BR')} km
                           </p>
                         </div>
                       </button>
@@ -359,9 +408,11 @@ export const AlugueisView: React.FC = () => {
                       <label className="block font-semibold text-slate-700 mb-1">Plano</label>
                       <select
                         value={plano}
-                        onChange={(e) =>
-                          setPlano(e.target.value as 'Semanal' | 'Mensal' | 'Anual')
-                        }
+                        onChange={(e) => {
+                          const p = e.target.value as 'Semanal' | 'Mensal' | 'Anual';
+                          setPlano(p);
+                          setValorMensal(valorDoPlano(selectedMotoId, p));
+                        }}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-slate-900"
                       >
                         <option value="Semanal">Semanal</option>
@@ -371,7 +422,7 @@ export const AlugueisView: React.FC = () => {
                     </div>
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">
-                        Data de Início
+                        Data de Início (dd/mm/aaaa)
                       </label>
                       <input
                         type="text"
@@ -403,7 +454,7 @@ export const AlugueisView: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">
-                        Valor Mensal da Locação (R$)
+                        Valor da locação por {plano === 'Semanal' ? 'semana' : 'mês'} (R$)
                       </label>
                       <input
                         type="number"
@@ -438,7 +489,7 @@ export const AlugueisView: React.FC = () => {
                         Minuta Contratual Pronta para Emissão
                       </span>
                       <span className="font-mono-tabular text-[#087BFF] font-bold">
-                        Franquia: 4.500 km/mês
+                        Cobrança por km: {config.cobrancaKm.ativo ? `${brl(config.cobrancaKm.valorPorCiclo)} a cada ${config.cobrancaKm.kmPorCiclo.toLocaleString('pt-BR')} km` : 'desligada'}
                       </span>
                     </div>
                     <p className="text-slate-600">
@@ -449,7 +500,11 @@ export const AlugueisView: React.FC = () => {
                       <span className="font-mono-tabular">{chosenMoto?.placa}</span>
                     </p>
                     <p className="text-slate-600 font-mono-tabular">
-                      Vigência: {dataInicio} a {dataPrevista} · Mensalidade R$ {valorMensal}
+                      Vigência: {dataInicio} a {dataPrevista} · {plano} {brl(valorMensal)} · Caução {brl(caucao)}
+                    </p>
+                    <p className="text-slate-600">
+                      Km de saída: <strong>{chosenMoto ? Math.round(chosenMoto.kmAtual).toLocaleString('pt-BR') : '—'} km</strong>
+                      {chosenMoto?.gpsImei ? ' · rastreador GPS ativo' : ' · moto sem GPS (lançar km manualmente)'}
                     </p>
                   </div>
                 </div>
@@ -467,11 +522,7 @@ export const AlugueisView: React.FC = () => {
                       </label>
                       <select
                         value={formaPagamento}
-                        onChange={(e) =>
-                          setFormaPagamento(
-                            e.target.value as 'PIX' | 'Boleto' | 'Cartão' | 'Transferência'
-                          )
-                        }
+                        onChange={(e) => setFormaPagamento(e.target.value as FormaPagamento)}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2.5"
                       >
                         <option value="PIX">PIX Instantâneo</option>
@@ -529,14 +580,6 @@ export const AlugueisView: React.FC = () => {
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveAluguel}
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                  >
-                    Salvar aluguel
-                  </button>
-
                   {step < 7 ? (
                     <button
                       type="button"
@@ -550,7 +593,8 @@ export const AlugueisView: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleSaveAluguel}
-                      className="rounded-lg bg-[#E50914] px-5 py-2 text-xs font-semibold text-white hover:bg-red-700 shadow-xs"
+                      disabled={salvando || !selectedClienteId || !selectedMotoId}
+                      className="rounded-lg bg-[#E50914] px-5 py-2 text-xs font-semibold text-white hover:bg-red-700 shadow-xs disabled:opacity-50"
                     >
                       Confirmar e Ativar Aluguel ✓
                     </button>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   NavTab,
   Moto,
@@ -13,30 +13,25 @@ import {
   CampanhaMarketing,
   AtividadeRecente,
   AlertaSistema,
+  ConfigSistema,
+  EstadoSistema,
+  FormaPagamento,
 } from '../types/mkMotos';
-import {
-  INITIAL_MOTOS,
-  INITIAL_CLIENTES,
-  INITIAL_ALUGUEIS,
-  INITIAL_CONTRATOS,
-  INITIAL_PAGAMENTOS,
-  INITIAL_MANUTENCOES,
-  INITIAL_LEADS,
-  INITIAL_CAMPANHAS,
-  INITIAL_ATIVIDADES,
-  INITIAL_ALERTAS,
-  MOTO_IMAGES,
-} from '../data/mockData';
+import { calcularAlertas } from '../lib/indicadores';
 
 export interface ToastMessage {
   id: string;
   text: string;
   subtext?: string;
+  erro?: boolean;
 }
+
+type Conexao = 'carregando' | 'online' | 'offline';
 
 interface AppContextType {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
+  conexao: Conexao;
   motos: Moto[];
   clientes: Cliente[];
   alugueis: Aluguel[];
@@ -47,6 +42,8 @@ interface AppContextType {
   campanhas: CampanhaMarketing[];
   atividades: AtividadeRecente[];
   alertas: AlertaSistema[];
+  config: ConfigSistema;
+  estado: EstadoSistema;
 
   // Deep-link modal states for connected storytelling
   selectedMotoId: string | null;
@@ -65,7 +62,7 @@ interface AppContextType {
   setDemoStep: (step: number) => void;
 
   // Actions
-  showToast: (text: string, subtext?: string) => void;
+  showToast: (text: string, subtext?: string, erro?: boolean) => void;
   toasts: ToastMessage[];
   dismissToast: (id: string) => void;
 
@@ -73,11 +70,25 @@ interface AppContextType {
   navigateToCliente: (clienteId: string) => void;
   navigateToContrato: (contratoId: string) => void;
 
-  updateMotoStatus: (motoId: string, status: MotoStatus) => void;
-  addMoto: (novaMoto: Omit<Moto, 'id' | 'codigo' | 'foto'> & { foto?: string }) => void;
-  updateMotoDetails: (motoId: string, updates: Partial<Moto>) => void;
+  /** Todas as ações abaixo vão para o servidor e devolvem true se deram certo. */
+  updateMotoStatus: (motoId: string, status: MotoStatus) => Promise<boolean>;
+  addMoto: (novaMoto: {
+    modelo: string;
+    marca: 'Honda' | 'Yamaha';
+    ano: number;
+    placa: string;
+    cor: string;
+    chassi?: string;
+    kmAtual: number;
+    valorMensal: number;
+    valorSemanal?: number;
+    gpsImei?: string;
+  }) => Promise<boolean>;
+  updateMotoDetails: (motoId: string, updates: Partial<Moto>) => Promise<boolean>;
+  registrarLeituraKm: (motoId: string, kmAtual: number) => Promise<boolean>;
 
-  addCliente: (novoCliente: Omit<Cliente, 'id' | 'dataCadastro'>) => Cliente;
+  addCliente: (novoCliente: Partial<Cliente>) => Promise<boolean>;
+  updateCliente: (clienteId: string, updates: Partial<Cliente>) => Promise<boolean>;
 
   createFullAluguel: (payload: {
     clienteId: string;
@@ -87,20 +98,28 @@ interface AppContextType {
     plano: 'Semanal' | 'Mensal' | 'Anual';
     valorMensal: number;
     caucao: number;
-    formaPagamento: 'PIX' | 'Boleto' | 'Cartão' | 'Transferência';
+    formaPagamento: FormaPagamento;
     pagamentoConfirmado: boolean;
-  }) => void;
-  finalizarAluguel: (aluguelId: string) => void;
+  }) => Promise<boolean>;
+  finalizarAluguel: (aluguelId: string, kmFinal?: number) => Promise<boolean>;
 
   registrarPagamento: (payload: {
     pagamentoId?: string;
     clienteId: string;
-    contratoId: string;
-    motoId: string;
+    contratoId?: string;
     valor: number;
     vencimento: string;
-    formaPagamento: 'PIX' | 'Boleto' | 'Cartão' | 'Transferência';
-  }) => void;
+    formaPagamento: FormaPagamento;
+    descricao?: string;
+  }) => Promise<boolean>;
+  criarCobranca: (payload: {
+    clienteId: string;
+    valor: number;
+    vencimento: string;
+    descricao: string;
+    formaPagamento: FormaPagamento;
+  }) => Promise<boolean>;
+  cancelarCobranca: (pagamentoId: string) => Promise<boolean>;
 
   registrarManutencao: (payload: {
     motoId: string;
@@ -110,28 +129,42 @@ interface AppContextType {
     oficina: string;
     observacao: string;
     colocarEmManutencao: boolean;
-  }) => void;
+    pecaId?: string;
+  }) => Promise<boolean>;
+  concluirManutencao: (payload: {
+    manutencaoId: string;
+    custo?: number;
+    oficina?: string;
+    observacao?: string;
+  }) => Promise<boolean>;
 
-  addLead: (novoLead: Omit<Lead, 'id' | 'dataEntrada'>) => void;
-  moveLeadStage: (leadId: string, stage: LeadStage) => void;
-  converterLeadEmCliente: (leadId: string) => void;
-  assinarContrato: (contratoId: string) => void;
+  addLead: (novoLead: Omit<Lead, 'id' | 'dataEntrada'>) => Promise<boolean>;
+  moveLeadStage: (leadId: string, stage: LeadStage) => Promise<boolean>;
+  converterLeadEmCliente: (leadId: string) => Promise<boolean>;
+  assinarContrato: (contratoId: string) => Promise<boolean>;
+
+  salvarConfig: (config: Partial<ConfigSistema>) => Promise<boolean>;
+  limparDemonstracao: () => Promise<boolean>;
+  restaurarDemonstracao: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+async function chamarApi(nome: string, payload: unknown) {
+  const r = await fetch(`/api/acoes/${nome}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload ?? {}),
+  });
+  const json = await r.json().catch(() => ({ erro: 'Resposta inválida do servidor.' }));
+  if (!r.ok) throw new Error(json.erro || `Erro ${r.status}`);
+  return json as { mensagem?: string; sub?: string; resultado?: unknown; estado: EstadoSistema };
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
-  const [motos, setMotos] = useState<Moto[]>(INITIAL_MOTOS);
-  const [clientes, setClientes] = useState<Cliente[]>(INITIAL_CLIENTES);
-  const [alugueis, setAlugueis] = useState<Aluguel[]>(INITIAL_ALUGUEIS);
-  const [contratos, setContratos] = useState<Contrato[]>(INITIAL_CONTRATOS);
-  const [pagamentos, setPagamentos] = useState<Pagamento[]>(INITIAL_PAGAMENTOS);
-  const [manutencoes, setManutencoes] = useState<ManutencaoItem[]>(INITIAL_MANUTENCOES);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
-  const [campanhas] = useState<CampanhaMarketing[]>(INITIAL_CAMPANHAS);
-  const [atividades, setAtividades] = useState<AtividadeRecente[]>(INITIAL_ATIVIDADES);
-  const [alertas] = useState<AlertaSistema[]>(INITIAL_ALERTAS);
+  const [estado, setEstado] = useState<EstadoSistema | null>(null);
+  const [conexao, setConexao] = useState<Conexao>('carregando');
 
   const [selectedMotoId, setSelectedMotoId] = useState<string | null>(null);
   const [selectedClienteId, setSelectedClienteId] = useState<string | null>(null);
@@ -142,18 +175,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [demoStep, setDemoStep] = useState<number>(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const showToast = (text: string, subtext?: string) => {
+  const showToast = useCallback((text: string, subtext?: string, erro?: boolean) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setToasts((prev) => [...prev, { id, text, subtext }]);
+    setToasts((prev) => [...prev, { id, text, subtext, erro }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3800);
-  };
+    }, erro ? 6000 : 3800);
+  }, []);
 
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // ---------------------------------------------------------------- sincronização com o servidor
+  const carregar = useCallback(async () => {
+    try {
+      const r = await fetch('/api/estado');
+      if (!r.ok) throw new Error();
+      setEstado(await r.json());
+      setConexao('online');
+    } catch {
+      setConexao('offline');
+    }
+  }, []);
+
+  const carregarRef = useRef(carregar);
+  carregarRef.current = carregar;
+
+  useEffect(() => {
+    carregar();
+    // Atualização em tempo real: o servidor avisa quando algo muda (GPS, outra pessoa, rotinas)
+    const fonte = new EventSource('/api/eventos');
+    fonte.addEventListener('atualizado', () => carregarRef.current());
+    fonte.addEventListener('conectado', () => carregarRef.current());
+    fonte.onerror = () => setConexao('offline');
+    // Reserva: se o canal em tempo real cair, consulta a cada 30 s
+    const intervalo = setInterval(() => carregarRef.current(), 30_000);
+    return () => {
+      fonte.close();
+      clearInterval(intervalo);
+    };
+  }, [carregar]);
+
+  const executar = useCallback(
+    async (nome: string, payload: unknown): Promise<boolean> => {
+      try {
+        const r = await chamarApi(nome, payload);
+        setEstado(r.estado);
+        setConexao('online');
+        if (r.mensagem) showToast(r.mensagem, r.sub);
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === 'Failed to fetch') {
+          setConexao('offline');
+          showToast('Sem conexão com o servidor', 'Verifique se o computador do sistema está ligado.', true);
+        } else {
+          showToast('Não foi possível concluir', msg, true);
+        }
+        return false;
+      }
+    },
+    [showToast]
+  );
+
+  const alertas = useMemo(() => (estado ? calcularAlertas(estado) : []), [estado]);
+
+  // ---------------------------------------------------------------- navegação
   const navigateToMoto = (motoId: string) => {
     setSelectedClienteId(null);
     setSelectedContratoId(null);
@@ -175,399 +263,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedContratoId(contratoId);
   };
 
-  const updateMotoStatus = (motoId: string, status: MotoStatus) => {
-    const targetMoto = motos.find((m) => m.id === motoId);
-    setMotos((prev) => prev.map((m) => (m.id === motoId ? { ...m, status } : m)));
-    if (targetMoto) {
-      const labelMap: Record<MotoStatus, string> = {
-        MANUTENÇÃO: 'Moto atualizada para manutenção ✓',
-        DISPONÍVEL: 'Moto liberada como disponível ✓',
-        ALUGADA: 'Moto marcada como alugada ✓',
-        ATRASADA: 'Moto sinalizada como atrasada ✓',
-      };
-      showToast(labelMap[status], `${targetMoto.modelo} (${targetMoto.placa})`);
-      setAtividades((prev) => [
-        {
-          id: `ativ-${Date.now()}`,
-          titulo: `Status alterado — ${targetMoto.modelo}`,
-          subtitulo: `Placa ${targetMoto.placa} atualizada para ${status}`,
-          horario: 'Agora mesmo',
-          tipo: 'manutencao',
-          referenciaId: motoId,
-        },
-        ...prev,
-      ]);
-    }
-  };
-
-  const addMoto = (novaMoto: Omit<Moto, 'id' | 'codigo' | 'foto'> & { foto?: string }) => {
-    const nextNum = motos.length + 1;
-    const id = `moto-${Date.now()}`;
-    const codigo = `MK-${String(nextNum).padStart(3, '0')}`;
-    const defaultFoto = novaMoto.modelo.toLowerCase().includes('biz')
-      ? MOTO_IMAGES.biz125
-      : novaMoto.modelo.toLowerCase().includes('factor')
-      ? MOTO_IMAGES.factor150
-      : novaMoto.modelo.toLowerCase().includes('bros')
-      ? MOTO_IMAGES.bros160
-      : novaMoto.modelo.toLowerCase().includes('fazer')
-      ? MOTO_IMAGES.fazer250
-      : MOTO_IMAGES.cg160;
-
-    const created: Moto = {
-      ...novaMoto,
-      id,
-      codigo,
-      foto: novaMoto.foto || defaultFoto,
-    };
-    setMotos((prev) => [created, ...prev]);
-    showToast('Nova motocicleta adicionada à frota ✓', `${created.modelo} • ${created.placa}`);
-  };
-
-  const updateMotoDetails = (motoId: string, updates: Partial<Moto>) => {
-    setMotos((prev) => prev.map((m) => (m.id === motoId ? { ...m, ...updates } : m)));
-    showToast('Dados da motocicleta atualizados ✓');
-  };
-
-  const addCliente = (novoCliente: Omit<Cliente, 'id' | 'dataCadastro'>): Cliente => {
-    const created: Cliente = {
-      ...novoCliente,
-      id: `cli-${Date.now()}`,
-      dataCadastro: '29/09/2026',
-    };
-    setClientes((prev) => [created, ...prev]);
-    setAtividades((prev) => [
-      {
-        id: `ativ-${Date.now()}`,
-        titulo: `Novo cliente cadastrado — ${created.nome}`,
-        subtitulo: `Origem: ${created.origemLead}`,
-        horario: 'Agora mesmo',
-        tipo: 'cliente',
-        referenciaId: created.id,
-      },
-      ...prev,
-    ]);
-    showToast('Cliente cadastrado com sucesso ✓', created.nome);
-    return created;
-  };
-
-  const createFullAluguel = (payload: {
-    clienteId: string;
-    motoId: string;
-    dataInicio: string;
-    dataPrevista: string;
-    plano: 'Semanal' | 'Mensal' | 'Anual';
-    valorMensal: number;
-    caucao: number;
-    formaPagamento: 'PIX' | 'Boleto' | 'Cartão' | 'Transferência';
-    pagamentoConfirmado: boolean;
-  }) => {
-    const ctrNumber = `CTR-2026-00${contratos.length + 1}`;
-    const locNumber = `LOC-2026-00${alugueis.length + 1}`;
-    const newAluguelId = `alu-${Date.now()}`;
-    const newContratoId = `ctr-${Date.now()}`;
-
-    const novoAluguel: Aluguel = {
-      id: newAluguelId,
-      codigo: locNumber,
-      clienteId: payload.clienteId,
-      motoId: payload.motoId,
-      contratoId: newContratoId,
-      dataInicio: payload.dataInicio,
-      dataPrevista: payload.dataPrevista,
-      plano: payload.plano,
-      valorMensal: payload.valorMensal,
-      caucao: payload.caucao,
-      status: 'Ativo',
-    };
-
-    const novoContrato: Contrato = {
-      id: newContratoId,
-      numero: ctrNumber,
-      clienteId: payload.clienteId,
-      motoId: payload.motoId,
-      aluguelId: newAluguelId,
-      dataEmissao: payload.dataInicio,
-      dataVencimento: payload.dataPrevista,
-      valorMensal: payload.valorMensal,
-      caucao: payload.caucao,
-      franquiaKmMensal: 4500,
-      status: 'Ativo',
-    };
-
-    const novoPagamento: Pagamento = {
-      id: `pag-${Date.now()}`,
-      clienteId: payload.clienteId,
-      contratoId: newContratoId,
-      motoId: payload.motoId,
-      competencia: 'Outubro/2026',
-      valor: payload.valorMensal,
-      vencimento: '05/10',
-      dataPagamento: payload.pagamentoConfirmado ? '29/09/2026' : undefined,
-      formaPagamento: payload.formaPagamento,
-      status: payload.pagamentoConfirmado ? 'Pago' : 'Pendente',
-    };
-
-    setAlugueis((prev) => [novoAluguel, ...prev]);
-    setContratos((prev) => [novoContrato, ...prev]);
-    setPagamentos((prev) => [novoPagamento, ...prev]);
-    setMotos((prev) =>
-      prev.map((m) =>
-        m.id === payload.motoId
-          ? {
-              ...m,
-              status: 'ALUGADA',
-              clienteAtualId: payload.clienteId,
-              contratoAtualId: newContratoId,
-            }
-          : m
-      )
+  if (!estado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0B0B0B] text-white p-6">
+        <div className="max-w-md text-center space-y-3">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#E50914] font-extrabold">MK</div>
+          {conexao === 'offline' ? (
+            <>
+              <p className="text-lg font-bold">Servidor do sistema não encontrado</p>
+              <p className="text-sm text-slate-300">
+                Verifique se o computador onde o MK Motos está instalado está ligado e com o
+                servidor aberto (arquivo <strong>iniciar-mk-motos.bat</strong>). Tentando de novo
+                automaticamente…
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-300">Carregando dados…</p>
+          )}
+        </div>
+      </div>
     );
-    setClientes((prev) =>
-      prev.map((c) =>
-        c.id === payload.clienteId
-          ? {
-              ...c,
-              status: 'Ativo',
-              motoAtualId: payload.motoId,
-              contratoAtualId: newContratoId,
-              proximoPagamentoValor: payload.valorMensal,
-              proximoPagamentoData: '05/10/2026',
-            }
-          : c
-      )
-    );
-
-    const motoObj = motos.find((m) => m.id === payload.motoId);
-    const cliObj = clientes.find((c) => c.id === payload.clienteId);
-    setAtividades((prev) => [
-      {
-        id: `ativ-${Date.now()}`,
-        titulo: `Novo aluguel criado — ${motoObj?.modelo || 'Motocicleta'}`,
-        subtitulo: `Contrato ${ctrNumber} vinculado a ${cliObj?.nome || 'Cliente'}`,
-        horario: 'Agora mesmo',
-        tipo: 'aluguel',
-        referenciaId: payload.motoId,
-      },
-      ...prev,
-    ]);
-    showToast('Aluguel e contrato gerados com sucesso ✓', `${ctrNumber} • ${cliObj?.nome}`);
-  };
-
-  const finalizarAluguel = (aluguelId: string) => {
-    const alu = alugueis.find((a) => a.id === aluguelId);
-    if (!alu) return;
-    setAlugueis((prev) => prev.map((a) => (a.id === aluguelId ? { ...a, status: 'Finalizado' } : a)));
-    setContratos((prev) =>
-      prev.map((c) => (c.id === alu.contratoId ? { ...c, status: 'Finalizado' } : c))
-    );
-    setMotos((prev) =>
-      prev.map((m) =>
-        m.id === alu.motoId
-          ? { ...m, status: 'DISPONÍVEL', clienteAtualId: undefined, contratoAtualId: undefined }
-          : m
-      )
-    );
-    showToast('Aluguel finalizado e moto liberada na frota ✓', alu.codigo);
-  };
-
-  const registrarPagamento = (payload: {
-    pagamentoId?: string;
-    clienteId: string;
-    contratoId: string;
-    motoId: string;
-    valor: number;
-    vencimento: string;
-    formaPagamento: 'PIX' | 'Boleto' | 'Cartão' | 'Transferência';
-  }) => {
-    if (payload.pagamentoId) {
-      setPagamentos((prev) =>
-        prev.map((p) =>
-          p.id === payload.pagamentoId
-            ? {
-                ...p,
-                status: 'Pago',
-                dataPagamento: '29/09/2026',
-                formaPagamento: payload.formaPagamento,
-              }
-            : p
-        )
-      );
-    } else {
-      const novo: Pagamento = {
-        id: `pag-${Date.now()}`,
-        clienteId: payload.clienteId,
-        contratoId: payload.contratoId,
-        motoId: payload.motoId,
-        competencia: 'Outubro/2026',
-        valor: payload.valor,
-        vencimento: payload.vencimento,
-        dataPagamento: '29/09/2026',
-        formaPagamento: payload.formaPagamento,
-        status: 'Pago',
-      };
-      setPagamentos((prev) => [novo, ...prev]);
-    }
-
-    setClientes((prev) =>
-      prev.map((c) => (c.id === payload.clienteId ? { ...c, status: 'Ativo' } : c))
-    );
-    const cli = clientes.find((c) => c.id === payload.clienteId);
-    setAtividades((prev) => [
-      {
-        id: `ativ-${Date.now()}`,
-        titulo: `Pagamento recebido — ${cli?.nome || 'Cliente'}`,
-        subtitulo: `R$ ${payload.valor.toLocaleString('pt-BR')} confirmado via ${payload.formaPagamento}`,
-        horario: 'Agora mesmo',
-        tipo: 'pagamento',
-        referenciaId: payload.clienteId,
-      },
-      ...prev,
-    ]);
-    showToast('Pagamento registrado com sucesso ✓', `R$ ${payload.valor.toLocaleString('pt-BR')} • ${cli?.nome || ''}`);
-  };
-
-  const registrarManutencao = (payload: {
-    motoId: string;
-    tipo: ManutencaoItem['tipo'];
-    kmNaManutencao: number;
-    custo: number;
-    oficina: string;
-    observacao: string;
-    colocarEmManutencao: boolean;
-  }) => {
-    const nova: ManutencaoItem = {
-      id: `man-${Date.now()}`,
-      motoId: payload.motoId,
-      tipo: payload.tipo,
-      data: '29/09/2026',
-      kmNaManutencao: payload.kmNaManutencao,
-      custo: payload.custo,
-      oficina: payload.oficina,
-      observacao: payload.observacao,
-      concluida: !payload.colocarEmManutencao,
-    };
-    setManutencoes((prev) => [nova, ...prev]);
-    setMotos((prev) =>
-      prev.map((m) =>
-        m.id === payload.motoId
-          ? {
-              ...m,
-              kmAtual: Math.max(m.kmAtual, payload.kmNaManutencao),
-              ultimaRevisaoKm: payload.kmNaManutencao,
-              proximaRevisaoKm: payload.kmNaManutencao + 5000,
-              ultimaManutencaoData: '29/09/2026',
-              status: payload.colocarEmManutencao ? 'MANUTENÇÃO' : m.status,
-            }
-          : m
-      )
-    );
-    const motoObj = motos.find((m) => m.id === payload.motoId);
-    showToast(
-      payload.colocarEmManutencao
-        ? 'Moto atualizada para manutenção ✓'
-        : 'Manutenção registrada com sucesso ✓',
-      `${payload.tipo} • ${motoObj?.modelo || ''}`
-    );
-  };
-
-  const addLead = (novoLead: Omit<Lead, 'id' | 'dataEntrada'>) => {
-    const created: Lead = {
-      ...novoLead,
-      id: `lead-${Date.now()}`,
-      dataEntrada: 'Agora mesmo',
-    };
-    setLeads((prev) => [created, ...prev]);
-    showToast('Novo lead adicionado ao pipeline ✓', `${created.nome} (${created.origem})`);
-  };
-
-  const moveLeadStage = (leadId: string, stage: LeadStage) => {
-    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage } : l)));
-    showToast('Etapa do lead atualizada ✓', stage);
-  };
-
-  const converterLeadEmCliente = (leadId: string) => {
-    const lead = leads.find((l) => l.id === leadId);
-    if (!lead) return;
-
-    const existingCliente = clientes.find(
-      (c) => c.nome.toLowerCase() === lead.nome.toLowerCase()
-    );
-
-    let targetClienteId = existingCliente?.id;
-
-    if (!existingCliente) {
-      const novoCli: Cliente = {
-        id: `cli-${Date.now()}`,
-        nome: lead.nome,
-        cpf: '412.890.318-20',
-        cnh: '06829104812 (Cat. A)',
-        telefone: lead.telefone,
-        email: `${lead.nome.toLowerCase().replace(/\s+/g, '.')}@email.com`,
-        endereco: 'Av. Paulista, 1000 - Bela Vista',
-        cidade: 'São Paulo - SP',
-        dataCadastro: '29/09/2026',
-        status: 'Ativo',
-        proximoPagamentoData: '10/10/2026',
-        proximoPagamentoValor: 850,
-        origemLead: lead.origem,
-        campanhaOrigem: lead.campanha,
-        observacoes: `Lead convertido da Central Comercial. Interesse inicial: ${lead.motoInteresse}.`,
-      };
-      setClientes((prev) => [novoCli, ...prev]);
-      targetClienteId = novoCli.id;
-    }
-
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === leadId
-          ? {
-              ...l,
-              stage: 'ALUGUEL REALIZADO',
-              convertidoClienteId: targetClienteId,
-            }
-          : l
-      )
-    );
-
-    setAtividades((prev) => [
-      {
-        id: `ativ-${Date.now()}`,
-        titulo: `Lead convertido em cliente — ${lead.nome}`,
-        subtitulo: `Origem: ${lead.origem} • Interesse: ${lead.motoInteresse}`,
-        horario: 'Agora mesmo',
-        tipo: 'comercial',
-        referenciaId: targetClienteId,
-      },
-      ...prev,
-    ]);
-
-    showToast('Lead convertido em cliente ✓', `${lead.nome} agora consta na base de Clientes`);
-  };
-
-  const assinarContrato = (contratoId: string) => {
-    const ctr = contratos.find((c) => c.id === contratoId);
-    setContratos((prev) =>
-      prev.map((c) => (c.id === contratoId ? { ...c, status: 'Ativo' } : c))
-    );
-    showToast('Assinatura registrada com sucesso ✓', ctr?.numero);
-  };
+  }
 
   return (
     <AppContext.Provider
       value={{
         activeTab,
         setActiveTab,
-        motos,
-        clientes,
-        alugueis,
-        contratos,
-        pagamentos,
-        manutencoes,
-        leads,
-        campanhas,
-        atividades,
+        conexao,
+        motos: estado.motos,
+        clientes: estado.clientes,
+        alugueis: estado.alugueis,
+        contratos: estado.contratos,
+        pagamentos: estado.pagamentos,
+        manutencoes: estado.manutencoes,
+        leads: estado.leads,
+        campanhas: estado.campanhas,
+        atividades: estado.atividades,
         alertas,
+        config: estado.config,
+        estado,
         selectedMotoId,
         setSelectedMotoId,
         selectedClienteId,
@@ -586,18 +321,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         navigateToMoto,
         navigateToCliente,
         navigateToContrato,
-        updateMotoStatus,
-        addMoto,
-        updateMotoDetails,
-        addCliente,
-        createFullAluguel,
-        finalizarAluguel,
-        registrarPagamento,
-        registrarManutencao,
-        addLead,
-        moveLeadStage,
-        converterLeadEmCliente,
-        assinarContrato,
+        updateMotoStatus: (motoId, status) => executar('updateMotoStatus', { motoId, status }),
+        addMoto: (novaMoto) => executar('addMoto', novaMoto),
+        updateMotoDetails: (motoId, updates) => executar('updateMotoDetails', { motoId, updates }),
+        registrarLeituraKm: (motoId, kmAtual) => executar('registrarLeituraKm', { motoId, kmAtual }),
+        addCliente: (novoCliente) => executar('addCliente', novoCliente),
+        updateCliente: (clienteId, updates) => executar('updateCliente', { clienteId, updates }),
+        createFullAluguel: (payload) => executar('createFullAluguel', payload),
+        finalizarAluguel: (aluguelId, kmFinal) => executar('finalizarAluguel', { aluguelId, kmFinal }),
+        registrarPagamento: (payload) => executar('registrarPagamento', payload),
+        criarCobranca: (payload) => executar('criarCobranca', payload),
+        cancelarCobranca: (pagamentoId) => executar('cancelarCobranca', { pagamentoId }),
+        registrarManutencao: (payload) => executar('registrarManutencao', payload),
+        concluirManutencao: (payload) => executar('concluirManutencao', payload),
+        addLead: (novoLead) => executar('addLead', novoLead),
+        moveLeadStage: (leadId, stage) => executar('moveLeadStage', { leadId, stage }),
+        converterLeadEmCliente: (leadId) => executar('converterLeadEmCliente', { leadId }),
+        assinarContrato: (contratoId) => executar('assinarContrato', { contratoId }),
+        salvarConfig: (config) => executar('salvarConfig', { config }),
+        limparDemonstracao: () => executar('limparDemonstracao', {}),
+        restaurarDemonstracao: () => executar('restaurarDemonstracao', {}),
       }}
     >
       {children}

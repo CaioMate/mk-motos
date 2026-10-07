@@ -1,6 +1,5 @@
 {
   "name": "MK MOTOS — Gestão de Locação de Motocicletas",
-  "description": "Sistema SaaS completo de gestão de frota, locações, contratos, manutenção, financeiro e CRM comercial para a MK Motos.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "description": "Sistema de gestão de frota, locações, contratos, manutenção, financeiro, CRM comercial e rastreamento GPS para a MK Motos.",
+  "requestFramePermissions": []
 }

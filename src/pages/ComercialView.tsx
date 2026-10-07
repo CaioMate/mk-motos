@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { LeadOrigin, LeadStage } from '../types/mkMotos';
-import { ORIGEM_LEADS_STATS } from '../data/mockData';
+import { origemLeads, taxaConversao } from '../lib/indicadores';
+import { brl, pct } from '../lib/formato';
 
 const KANBAN_STAGES: LeadStage[] = [
   'NOVOS LEADS',
@@ -36,19 +37,24 @@ export const ComercialView: React.FC = () => {
     moveLeadStage,
     converterLeadEmCliente,
     navigateToCliente,
+    estado,
   } = useApp();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [nome, setNome] = useState('');
-  const [telefone, setTelefone] = useState('(11) 9');
+  const [telefone, setTelefone] = useState('');
   const [motoInteresse, setMotoInteresse] = useState('Honda CG 160');
   const [origem, setOrigem] = useState<LeadOrigin>('Instagram');
-  const [campanha, setCampanha] = useState('Alugue sua moto para trabalhar');
+  const [campanha, setCampanha] = useState('');
+  const [notas, setNotas] = useState('');
 
-  const handleCreateLead = (e: React.FormEvent) => {
+  const origens = origemLeads(estado);
+  const totalConversoes = campanhas.reduce((s, c) => s + c.conversoes, 0);
+
+  const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim()) return;
-    addLead({
+    const ok = await addLead({
       nome,
       telefone,
       motoInteresse,
@@ -56,10 +62,14 @@ export const ComercialView: React.FC = () => {
       campanha,
       stage: 'NOVOS LEADS',
       finalidade: 'App de Entrega / Mobilidade',
-      notas: 'Novo lead captado pela campanha comercial.',
+      notas,
     });
-    setNome('');
-    setModalOpen(false);
+    if (ok) {
+      setNome('');
+      setTelefone('');
+      setNotas('');
+      setModalOpen(false);
+    }
   };
 
   return (
@@ -99,7 +109,7 @@ export const ComercialView: React.FC = () => {
             </h2>
           </div>
           <span className="text-xs text-slate-400 font-mono-tabular">
-            Taxa média de conversão: 29,1%
+            Taxa de conversão: {pct(taxaConversao(estado))} ({leads.filter((l) => l.stage === 'ALUGUEL REALIZADO').length}/{leads.length} leads)
           </span>
         </div>
 
@@ -248,12 +258,12 @@ export const ComercialView: React.FC = () => {
           <div className="border-b border-slate-100 pb-4">
             <h2 className="text-base font-bold text-slate-900">Origem dos leads</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Quantidade de interessados captados por canal nos últimos 30 dias
+              Leads e clientes cadastrados por canal de origem
             </p>
           </div>
 
           <div className="mt-5 space-y-4">
-            {ORIGEM_LEADS_STATS.map((item) => (
+            {origens.map((item) => (
               <div key={item.origem} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800">{item.origem}</span>
@@ -283,7 +293,7 @@ export const ComercialView: React.FC = () => {
                 </p>
               </div>
               <span className="text-xs font-mono-tabular font-bold text-emerald-600">
-                16 novos contratos gerados
+                {totalConversoes} conversões registradas
               </span>
             </div>
 
@@ -320,7 +330,7 @@ export const ComercialView: React.FC = () => {
                     <div>
                       <span className="block text-[11px] text-slate-400">Investimento</span>
                       <span className="text-sm font-bold text-slate-700">
-                        R$ {camp.investimentoMensal}
+                        {brl(camp.investimentoMensal)}
                       </span>
                     </div>
                   </div>
@@ -329,18 +339,10 @@ export const ComercialView: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-            <span>
-              Exemplo conectado: O cliente <strong>João Silva</strong> (Honda CG 160) entrou pela
-              campanha "Alugue sua moto para trabalhar".
-            </span>
-            <button
-              onClick={() => navigateToCliente('cli-1')}
-              className="font-semibold text-[#087BFF] hover:underline whitespace-nowrap ml-2"
-            >
-              Ver João Silva →
-            </button>
-          </div>
+          <p className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
+            Leads cadastrados com o mesmo nome de campanha somam automaticamente em “Leads” e, ao
+            converter, em “Conversões”.
+          </p>
         </div>
       </section>
 
@@ -420,8 +422,24 @@ export const ComercialView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Campanha</label>
                 <input
                   type="text"
+                  list="campanhas-cadastradas"
                   value={campanha}
                   onChange={(e) => setCampanha(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900"
+                />
+                <datalist id="campanhas-cadastradas">
+                  {campanhas.map((c) => (
+                    <option key={c.id} value={c.nome} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Anotações</label>
+                <input
+                  type="text"
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900"
                 />
               </div>

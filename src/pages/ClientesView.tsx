@@ -6,11 +6,30 @@ import {
   Eye,
   X,
   ArrowUpRight,
+  Edit3,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { LeadOrigin } from '../types/mkMotos';
+import { Cliente, LeadOrigin } from '../types/mkMotos';
+import { brl, cpfValido, formatarCpf } from '../lib/formato';
+import { cadastroIncompleto } from '../lib/indicadores';
 
-type ClienteFilter = 'Todos' | 'Ativos' | 'Inativos' | 'Com pagamento pendente';
+type ClienteFilter = 'Todos' | 'Ativos' | 'Inativos' | 'Com pagamento pendente' | 'Cadastro incompleto';
+
+const FORM_VAZIO = {
+  nome: '',
+  telefone: '',
+  cpf: '',
+  cnh: '',
+  email: '',
+  endereco: '',
+  cidade: '',
+  origemLead: 'Instagram' as LeadOrigin,
+  campanhaOrigem: '',
+  observacoes: '',
+};
+
+const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900';
 
 export const ClientesView: React.FC = () => {
   const {
@@ -22,24 +41,22 @@ export const ClientesView: React.FC = () => {
     navigateToMoto,
     navigateToContrato,
     addCliente,
+    updateCliente,
   } = useApp();
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ClienteFilter>('Todos');
   const [modalOpen, setModalOpen] = useState(false);
-
-  // Novo cliente form
-  const [nome, setNome] = useState('');
-  const [telefone, setTelefone] = useState('(11) 9');
-  const [cpf, setCpf] = useState('');
-  const [cnh, setCnh] = useState('');
-  const [origem, setOrigem] = useState<LeadOrigin>('Instagram');
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [form, setForm] = useState(FORM_VAZIO);
+  const [salvando, setSalvando] = useState(false);
 
   const filteredClientes = clientes.filter((c) => {
+    const q = search.toLowerCase();
     const matchesSearch =
-      c.nome.toLowerCase().includes(search.toLowerCase()) ||
-      c.telefone.toLowerCase().includes(search.toLowerCase()) ||
-      c.cpf.toLowerCase().includes(search.toLowerCase());
+      c.nome.toLowerCase().includes(q) ||
+      c.telefone.toLowerCase().includes(q) ||
+      c.cpf.toLowerCase().includes(q);
     if (!matchesSearch) return false;
 
     if (filter === 'Todos') return true;
@@ -47,38 +64,52 @@ export const ClientesView: React.FC = () => {
     if (filter === 'Inativos') return c.status === 'Inativo';
     if (filter === 'Com pagamento pendente')
       return c.status === 'Pagamento Pendente' || c.status === 'Em Atraso';
+    if (filter === 'Cadastro incompleto') return cadastroIncompleto(c);
     return true;
   });
 
-  const handleCreateCliente = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nome.trim()) return;
-    addCliente({
-      nome,
-      cpf: cpf || '419.882.104-29',
-      cnh: cnh || '06819204912 (Cat. A)',
-      telefone,
-      email: `${nome.toLowerCase().replace(/\s+/g, '.')}@email.com`,
-      endereco: 'Av. Paulista, 1500',
-      cidade: 'São Paulo - SP',
-      status: 'Ativo',
-      proximoPagamentoData: '15/10/2026',
-      proximoPagamentoValor: 850,
-      origemLead: origem,
-      campanhaOrigem: 'Alugue sua moto para trabalhar',
-      observacoes: 'Cliente cadastrado manualmente pelo painel administrativo.',
-    });
-    setNome('');
-    setCpf('');
-    setCnh('');
-    setModalOpen(false);
+  const abrirNovo = () => {
+    setEditandoId(null);
+    setForm(FORM_VAZIO);
+    setModalOpen(true);
   };
+
+  const abrirEdicao = (c: Cliente) => {
+    setEditandoId(c.id);
+    setForm({
+      nome: c.nome,
+      telefone: c.telefone,
+      cpf: c.cpf,
+      cnh: c.cnh,
+      email: c.email,
+      endereco: c.endereco,
+      cidade: c.cidade,
+      origemLead: c.origemLead,
+      campanhaOrigem: c.campanhaOrigem ?? '',
+      observacoes: c.observacoes,
+    });
+    setModalOpen(true);
+  };
+
+  const handleSalvar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSalvando(true);
+    const ok = editandoId ? await updateCliente(editandoId, form) : await addCliente(form);
+    setSalvando(false);
+    if (ok) {
+      setForm(FORM_VAZIO);
+      setModalOpen(false);
+    }
+  };
+
+  const cpfDigitado = form.cpf.replace(/\D/g, '').length === 11;
 
   const filters: ClienteFilter[] = [
     'Todos',
     'Ativos',
     'Inativos',
     'Com pagamento pendente',
+    'Cadastro incompleto',
   ];
 
   return (
@@ -98,11 +129,11 @@ export const ClientesView: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setModalOpen(true)}
+          onClick={abrirNovo}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#E50914] px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors whitespace-nowrap shadow-xs"
         >
           <Plus className="h-4 w-4" />
-          + Novo cliente
+          Novo cliente
         </button>
       </div>
 
@@ -177,8 +208,13 @@ export const ClientesView: React.FC = () => {
                       >
                         <p className="font-bold text-slate-900 text-sm">{cli.nome}</p>
                         <p className="text-[11px] text-slate-500">
-                          Origem: {cli.origemLead} · CPF {cli.cpf}
+                          Origem: {cli.origemLead} · CPF {cli.cpf || '—'}
                         </p>
+                        {cadastroIncompleto(cli) && (
+                          <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                            <AlertTriangle className="h-3 w-3" /> Cadastro incompleto
+                          </p>
+                        )}
                       </button>
                     </td>
 
@@ -222,7 +258,7 @@ export const ClientesView: React.FC = () => {
                       {cli.proximoPagamentoValor > 0 ? (
                         <div>
                           <span className="font-bold text-slate-900">
-                            R$ {cli.proximoPagamentoValor.toLocaleString('pt-BR')}
+                            {brl(cli.proximoPagamentoValor)}
                           </span>
                           <span className="text-slate-500"> · {cli.proximoPagamentoData}</span>
                         </div>
@@ -241,6 +277,13 @@ export const ClientesView: React.FC = () => {
                           WhatsApp
                         </button>
                         <button
+                          onClick={() => abrirEdicao(cli)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          Editar
+                        </button>
+                        <button
                           onClick={() => setSelectedClienteId(cli.id)}
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                         >
@@ -257,51 +300,61 @@ export const ClientesView: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL: + NOVO CLIENTE */}
+      {/* MODAL: NOVO / EDITAR CLIENTE */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between bg-[#0B0B0B] px-6 py-4 text-white">
-              <h2 className="text-base font-bold">Cadastrar Novo Cliente MK Motos</h2>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between bg-[#0B0B0B] px-6 py-4 text-white">
+              <h2 className="text-base font-bold">
+                {editandoId ? 'Editar cadastro do cliente' : 'Cadastrar novo cliente'}
+              </h2>
+              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateCliente} className="p-6 space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome Completo</label>
-                <input
-                  type="text"
-                  required
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Ex: Henrique Vasconcelos"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Telefone / WhatsApp</label>
-                  <input
-                    type="text"
-                    required
-                    value={telefone}
-                    onChange={(e) => setTelefone(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 font-mono-tabular"
-                  />
+            <form onSubmit={handleSalvar} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Nome completo *</label>
+                  <input required minLength={3} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Origem do Cliente</label>
-                  <select
-                    value={origem}
-                    onChange={(e) => setOrigem(e.target.value as LeadOrigin)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900"
-                  >
+                  <label className="block font-semibold text-slate-700 mb-1">CPF *</label>
+                  <input
+                    required
+                    value={form.cpf}
+                    onChange={(e) => setForm({ ...form, cpf: formatarCpf(e.target.value) })}
+                    placeholder="000.000.000-00"
+                    className={`${inputCls} font-mono-tabular ${cpfDigitado && !cpfValido(form.cpf) ? 'border-red-400 bg-red-50' : ''}`}
+                  />
+                  {cpfDigitado && !cpfValido(form.cpf) && (
+                    <p className="mt-1 text-[11px] font-semibold text-[#E50914]">CPF inválido</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">CNH (número e categoria)</label>
+                  <input value={form.cnh} onChange={(e) => setForm({ ...form, cnh: e.target.value })} placeholder="00000000000 (Cat. A)" className={`${inputCls} font-mono-tabular`} />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Telefone / WhatsApp *</label>
+                  <input required value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="(11) 99999-9999" className={`${inputCls} font-mono-tabular`} />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">E-mail</label>
+                  <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Endereço (rua, número, bairro)</label>
+                  <input value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Cidade - UF</label>
+                  <input value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} placeholder="São Paulo - SP" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Como conheceu a MK Motos</label>
+                  <select value={form.origemLead} onChange={(e) => setForm({ ...form, origemLead: e.target.value as LeadOrigin })} className={inputCls}>
                     <option value="Instagram">Instagram</option>
                     <option value="WhatsApp">WhatsApp</option>
                     <option value="Google">Google</option>
@@ -309,41 +362,18 @@ export const ClientesView: React.FC = () => {
                     <option value="Anúncios">Anúncios</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">CPF</label>
-                  <input
-                    type="text"
-                    value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
-                    placeholder="000.000.000-00"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 font-mono-tabular"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Número da CNH</label>
-                  <input
-                    type="text"
-                    value={cnh}
-                    onChange={(e) => setCnh(e.target.value)}
-                    placeholder="05918274911 (Cat. A)"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 font-mono-tabular"
-                  />
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Observações internas</label>
+                  <textarea rows={2} value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} className={inputCls} />
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 font-semibold text-slate-700"
-                >
+                <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 font-semibold text-slate-700">
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#E50914] px-4 py-2 font-semibold text-white hover:bg-red-700"
-                >
-                  Salvar Cliente
+                <button type="submit" disabled={salvando} className="rounded-lg bg-[#E50914] px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                  {editandoId ? 'Salvar alterações' : 'Salvar cliente'}
                 </button>
               </div>
             </form>

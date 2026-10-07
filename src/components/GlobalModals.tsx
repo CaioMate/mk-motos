@@ -1,22 +1,18 @@
 import React, { useState } from 'react';
 import {
   X,
-  Wrench,
-  User,
   FileText,
-  CreditCard,
   MessageSquare,
   Send,
-  CheckCircle2,
   Printer,
   ArrowUpRight,
-  Gauge,
-  Calendar,
-  AlertTriangle,
-  Sparkles,
+  Satellite,
+  MapPin,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MotoStatus } from '../types/mkMotos';
+import { brl, linkMapa, linkWhatsApp } from '../lib/formato';
+import { tempoRelativo } from '../lib/datas';
 
 export const GlobalModals: React.FC = () => {
   const {
@@ -26,6 +22,7 @@ export const GlobalModals: React.FC = () => {
     contratos,
     pagamentos,
     manutencoes,
+    config,
     selectedMotoId,
     setSelectedMotoId,
     selectedClienteId,
@@ -39,11 +36,11 @@ export const GlobalModals: React.FC = () => {
     navigateToContrato,
     updateMotoStatus,
     assinarContrato,
-    showToast,
   } = useApp();
 
+  const nomeEmpresa = config.empresa.nome || 'MK Motos';
   const [waMessage, setWaMessage] = useState(
-    'Olá! Tudo bem? Aqui é da equipe MK Motos. Passando para confirmar os detalhes da sua locação.'
+    `Olá! Tudo bem? Aqui é da equipe ${nomeEmpresa}. Passando para confirmar os detalhes da sua locação.`
   );
   const [waSentLog, setWaSentLog] = useState<string[]>([]);
 
@@ -126,7 +123,7 @@ export const GlobalModals: React.FC = () => {
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                       <span className="text-xs text-slate-500">Quilometragem</span>
                       <p className="mt-1 text-lg font-bold text-slate-900 font-mono-tabular">
-                        {selectedMoto.kmAtual.toLocaleString('pt-BR')} km
+                        {Math.round(selectedMoto.kmAtual).toLocaleString('pt-BR')} km
                       </p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
@@ -136,7 +133,7 @@ export const GlobalModals: React.FC = () => {
                       </p>
                       <span className="text-[11px] font-medium text-[#E50914] font-mono-tabular">
                         {selectedMoto.proximaRevisaoKm - selectedMoto.kmAtual > 0
-                          ? `Revisão em ${(
+                          ? `Revisão em ${Math.round(
                               selectedMoto.proximaRevisaoKm - selectedMoto.kmAtual
                             ).toLocaleString('pt-BR')} km`
                           : 'Revisão vencida / oficina'}
@@ -145,13 +142,60 @@ export const GlobalModals: React.FC = () => {
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                       <span className="text-xs text-slate-500">Valor Mensal</span>
                       <p className="mt-1 text-lg font-bold text-[#087BFF] font-mono-tabular">
-                        R$ {selectedMoto.valorMensal.toLocaleString('pt-BR')}
+                        {brl(selectedMoto.valorMensal)}
                       </p>
                       <span className="text-[11px] text-slate-500 font-mono-tabular">
-                        R$ {selectedMoto.valorSemanal}/sem
+                        {brl(selectedMoto.valorSemanal)}/sem
                       </span>
                     </div>
                   </div>
+
+                  {/* Rastreador GPS */}
+                  {(() => {
+                    const pos = selectedMoto.gpsUltimaPosicao;
+                    const ctr = contratos.find((c) => c.id === selectedMoto.contratoAtualId);
+                    const ciclo = config.cobrancaKm.kmPorCiclo;
+                    const rodados = ctr?.kmRodados ?? 0;
+                    const proximoCiclo = ciclo - (rodados % ciclo);
+                    return (
+                      <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 font-semibold text-slate-900">
+                            <Satellite className="h-3.5 w-3.5 text-[#087BFF]" />
+                            Rastreador GPS {selectedMoto.gpsImei ? `· ${selectedMoto.gpsImei}` : ''}
+                          </span>
+                          {pos && (
+                            <a
+                              href={linkMapa(pos.lat, pos.lon)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 font-semibold text-[#087BFF] hover:underline"
+                            >
+                              <MapPin className="h-3.5 w-3.5" /> Ver no mapa
+                            </a>
+                          )}
+                        </div>
+                        {!selectedMoto.gpsImei ? (
+                          <p className="text-slate-600">Sem rastreador cadastrado. Cadastre o IMEI em Frota → Editar / GPS.</p>
+                        ) : pos ? (
+                          <p className="text-slate-600">
+                            Última posição {tempoRelativo(pos.dataHora)}
+                            {pos.velocidadeKmh !== undefined ? ` · ${Math.round(pos.velocidadeKmh)} km/h` : ''}
+                          </p>
+                        ) : (
+                          <p className="text-amber-700">Aguardando a primeira posição do rastreador.</p>
+                        )}
+                        {ctr && (
+                          <p className="text-slate-700">
+                            Com o cliente atual: <strong>{Math.round(rodados).toLocaleString('pt-BR')} km</strong> rodados
+                            {config.cobrancaKm.ativo && (
+                              <> · próxima cobrança por km em <strong>{Math.round(proximoCiclo).toLocaleString('pt-BR')} km</strong></>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Cliente Atual Conectado */}
                   {(() => {
@@ -237,7 +281,7 @@ export const GlobalModals: React.FC = () => {
                           </div>
                           <div className="text-right font-mono-tabular shrink-0">
                             <p className="text-xs font-bold text-slate-900">
-                              R$ {item.custo.toLocaleString('pt-BR')}
+                              {item.concluida ? brl(item.custo) : 'Pendente'}
                             </p>
                             <p className="text-[11px] text-slate-400">{item.data}</p>
                           </div>
@@ -271,7 +315,7 @@ export const GlobalModals: React.FC = () => {
                           >
                             <div>
                               <p className="text-xs font-semibold text-slate-900">
-                                {cli?.nome || 'Cliente'} · {pag.competencia}
+                                {cli?.nome || 'Cliente'} · {pag.tipo ?? 'Mensalidade'} · {pag.competencia}
                               </p>
                               <p className="text-xs text-slate-500 font-mono-tabular">
                                 Vencimento {pag.vencimento} · {pag.formaPagamento}
@@ -279,7 +323,7 @@ export const GlobalModals: React.FC = () => {
                             </div>
                             <div className="text-right font-mono-tabular">
                               <p className="text-xs font-bold text-slate-900">
-                                R$ {pag.valor.toLocaleString('pt-BR')}
+                                {brl(pag.valor)}
                               </p>
                               <span
                                 className={`text-[11px] font-semibold ${
@@ -365,10 +409,10 @@ export const GlobalModals: React.FC = () => {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <span className="text-xs text-slate-500">Documentos Pessoais</span>
                   <p className="mt-1 text-sm font-bold text-slate-900 font-mono-tabular">
-                    CPF: {selectedCliente.cpf}
+                    CPF: {selectedCliente.cpf || '— não informado'}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-600 font-mono-tabular">
-                    CNH: {selectedCliente.cnh}
+                    CNH: {selectedCliente.cnh || '— não informada'}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -386,7 +430,7 @@ export const GlobalModals: React.FC = () => {
                     Canal: {selectedCliente.origemLead}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-600 truncate">
-                    {selectedCliente.campanhaOrigem || 'Captação Direta MK Motos'}
+                    {selectedCliente.campanhaOrigem || 'Captação direta'}
                   </p>
                 </div>
               </div>
@@ -420,7 +464,7 @@ export const GlobalModals: React.FC = () => {
                           </span>
                           <h4 className="text-sm font-bold text-slate-900">{motoAtual.modelo}</h4>
                           <p className="text-xs text-slate-500 font-mono-tabular">
-                            Placa {motoAtual.placa} · {motoAtual.kmAtual.toLocaleString('pt-BR')} km
+                            Placa {motoAtual.placa} · {Math.round(motoAtual.kmAtual).toLocaleString('pt-BR')} km
                           </p>
                         </div>
                       </div>
@@ -456,8 +500,8 @@ export const GlobalModals: React.FC = () => {
                           {ctrAtual.numero}
                         </h4>
                         <p className="text-xs text-slate-500 font-mono-tabular">
-                          Vigência: {ctrAtual.dataEmissao} até {ctrAtual.dataVencimento} · R${' '}
-                          {ctrAtual.valorMensal}/mês
+                          Vigência: {ctrAtual.dataEmissao} até {ctrAtual.dataVencimento} ·{' '}
+                          {brl(ctrAtual.valorMensal)} · {Math.round(ctrAtual.kmRodados ?? 0).toLocaleString('pt-BR')} km rodados
                         </p>
                       </div>
                       <button
@@ -485,15 +529,15 @@ export const GlobalModals: React.FC = () => {
                         className="py-2.5 flex items-center justify-between text-xs"
                       >
                         <div>
-                          <span className="font-semibold text-slate-900">{pag.competencia}</span>
+                          <span className="font-semibold text-slate-900">{pag.tipo ?? 'Mensalidade'}</span>
                           <span className="text-slate-500 font-mono-tabular">
                             {' '}
-                            · Vencimento {pag.vencimento} · {pag.formaPagamento}
+                            · {pag.descricao ?? pag.competencia} · Venc. {pag.vencimento}
                           </span>
                         </div>
                         <div className="flex items-center gap-4 font-mono-tabular">
                           <span className="font-bold text-slate-900">
-                            R$ {pag.valor.toLocaleString('pt-BR')}
+                            {brl(pag.valor)}
                           </span>
                           <span
                             className={`font-semibold ${
@@ -522,12 +566,12 @@ export const GlobalModals: React.FC = () => {
 
       {/* 3. MODAL DE VISUALIZAÇÃO DE CONTRATO PROFISSIONAL */}
       {selectedContrato && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
-          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-[#0B0B0B] px-6 py-4 text-white">
+        <div className="modal-impressao fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="modal-impressao relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="nao-imprimir sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-[#0B0B0B] px-6 py-4 text-white">
               <div>
                 <span className="text-xs text-slate-400 font-mono-tabular">
-                  DOCUMENTO OFICIAL DE LOCAÇÃO · {selectedContrato.numero}
+                  DOCUMENTO DE LOCAÇÃO · {selectedContrato.numero}
                 </span>
                 <h2 className="text-lg font-bold text-white">
                   Instrumento Particular de Locação de Motocicleta
@@ -535,12 +579,7 @@ export const GlobalModals: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    showToast(
-                      'Função disponível na versão completa.',
-                      'Impressão e envio para cartório / PDF assinado.'
-                    )
-                  }
+                  onClick={() => window.print()}
                   className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 transition-colors"
                 >
                   <Printer className="h-3.5 w-3.5" />
@@ -559,7 +598,7 @@ export const GlobalModals: React.FC = () => {
               const cli = clientes.find((c) => c.id === selectedContrato.clienteId);
               const moto = motos.find((m) => m.id === selectedContrato.motoId);
               return (
-                <div className="p-8 space-y-6 text-slate-800">
+                <div className="area-impressao p-8 space-y-6 text-slate-800">
                   <div className="flex items-start justify-between border-b border-slate-200 pb-6">
                     <div>
                       <div className="flex items-center gap-2">
@@ -568,7 +607,9 @@ export const GlobalModals: React.FC = () => {
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-slate-500">
-                        MK MOTOS LOCAÇÃO E GESTÃO DE FROTA LTDA · CNPJ 48.921.304/0001-19
+                        {nomeEmpresa}
+                        {config.empresa.cnpj && ` · CNPJ ${config.empresa.cnpj}`}
+                        {config.empresa.telefone && ` · ${config.empresa.telefone}`}
                       </p>
                     </div>
                     <div className="text-right font-mono-tabular">
@@ -612,7 +653,11 @@ export const GlobalModals: React.FC = () => {
                         <strong>Chassi:</strong> {moto?.chassi}
                       </p>
                       <p className="font-mono-tabular">
-                        <strong>Km na Entrega:</strong> {moto?.kmAtual.toLocaleString('pt-BR')} km
+                        <strong>Km na entrega:</strong>{' '}
+                        {Math.round(selectedContrato.kmInicial ?? moto?.kmAtual ?? 0).toLocaleString('pt-BR')} km
+                      </p>
+                      <p className="font-mono-tabular">
+                        <strong>Rastreador:</strong> {moto?.gpsImei || 'não instalado'}
                       </p>
                     </div>
                   </div>
@@ -628,63 +673,79 @@ export const GlobalModals: React.FC = () => {
                       <span className="font-mono-tabular font-semibold text-slate-900">
                         {selectedContrato.dataVencimento}
                       </span>
-                      , mediante pagamento mensal de{' '}
+                      , mediante pagamento {selectedContrato.plano === 'Semanal' ? 'semanal' : 'mensal'} de{' '}
                       <span className="font-mono-tabular font-semibold text-slate-900">
-                        R$ {selectedContrato.valorMensal.toLocaleString('pt-BR')},00
+                        {brl(selectedContrato.valorMensal)}
                       </span>{' '}
                       e caução de garantia no valor de{' '}
                       <span className="font-mono-tabular font-semibold text-slate-900">
-                        R$ {selectedContrato.caucao.toLocaleString('pt-BR')},00
+                        {brl(selectedContrato.caucao)}
                       </span>
                       .
                     </p>
                     <p>
                       <strong className="text-slate-900">
-                        CLÁUSULA SEGUNDA — DA MANUTENÇÃO PREVENTIVA:
+                        CLÁUSULA SEGUNDA — DA QUILOMETRAGEM E MANUTENÇÃO:
                       </strong>{' '}
-                      O LOCATÁRIO compromete-se a apresentar a motocicleta na oficina credenciada MK
-                      Motos a cada revisão programada no painel de controle, respeitando a franquia
-                      de{' '}
-                      <span className="font-mono-tabular font-semibold text-slate-900">
-                        {selectedContrato.franquiaKmMensal.toLocaleString('pt-BR')} km/mês
-                      </span>
+                      A quilometragem é apurada pelo rastreador GPS instalado no veículo (ou pela leitura do
+                      hodômetro).
+                      {config.cobrancaKm.ativo && (
+                        <>
+                          {' '}A cada{' '}
+                          <span className="font-mono-tabular font-semibold text-slate-900">
+                            {config.cobrancaKm.kmPorCiclo.toLocaleString('pt-BR')} km
+                          </span>{' '}
+                          rodados será cobrado o valor de{' '}
+                          <span className="font-mono-tabular font-semibold text-slate-900">
+                            {brl(config.cobrancaKm.valorPorCiclo)}
+                          </span>
+                          , com vencimento em {config.cobrancaKm.diasParaVencimento} dias.
+                        </>
+                      )}{' '}
+                      O LOCATÁRIO compromete-se a apresentar a motocicleta para as trocas de óleo e peças
+                      conforme o plano de manutenção
+                      {config.planoPecas.some((p) => p.cobrarCliente && p.valorCobrado > 0) && (
+                        <>
+                          , arcando com:{' '}
+                          {config.planoPecas
+                            .filter((p) => p.cobrarCliente && p.valorCobrado > 0)
+                            .map((p) => `${p.nome} a cada ${p.intervaloKm.toLocaleString('pt-BR')} km (${brl(p.valorCobrado)})`)
+                            .join('; ')}
+                        </>
+                      )}
                       .
                     </p>
                     <p>
                       <strong className="text-slate-900">
                         CLÁUSULA TERCEIRA — DO RASTREAMENTO E USO:
                       </strong>{' '}
-                      O veículo conta com telemetria ativa MK Motos, sendo destinado exclusivamente
-                      ao condutor titular identificado neste instrumento.
+                      O veículo possui rastreamento por GPS, sendo destinado exclusivamente ao condutor
+                      titular identificado neste instrumento, que declara ciência do monitoramento.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6 pt-6 border-t border-slate-200 text-center text-xs">
-                    <div className="pt-6 border-t border-slate-300">
-                      <p className="font-bold text-slate-900">MK MOTOS LOCAÇÃO LTDA</p>
-                      <p className="text-slate-500">Locadora · Assinado Digitalmente</p>
+                  <div className="grid grid-cols-2 gap-6 pt-10 text-center text-xs">
+                    <div className="pt-3 border-t border-slate-400">
+                      <p className="font-bold text-slate-900">{nomeEmpresa}</p>
+                      <p className="text-slate-500">Locadora</p>
                     </div>
-                    <div className="pt-6 border-t border-slate-300">
+                    <div className="pt-3 border-t border-slate-400">
                       <p className="font-bold text-slate-900">{cli?.nome}</p>
-                      <p className="text-slate-500">
-                        {selectedContrato.status === 'Aguardando assinatura'
-                          ? 'Pendente de assinatura eletrônica'
-                          : 'Locatário · Assinado Digitalmente'}
-                      </p>
+                      <p className="text-slate-500">Locatário · CPF {cli?.cpf}</p>
                     </div>
                   </div>
 
                   {selectedContrato.status === 'Aguardando assinatura' && (
-                    <div className="flex items-center justify-between rounded-xl bg-blue-50 border border-blue-200 p-4">
+                    <div className="nao-imprimir flex items-center justify-between rounded-xl bg-blue-50 border border-blue-200 p-4">
                       <div className="text-xs text-slate-700">
-                        <strong className="text-slate-900">Simulação Comercial:</strong> Este
-                        contrato está aguardando assinatura do cliente. Deseja simular a confirmação?
+                        Este contrato está aguardando a assinatura do cliente. Depois de assinado
+                        (impresso ou digital), registre aqui.
                       </div>
                       <button
                         onClick={() => assinarContrato(selectedContrato.id)}
                         className="rounded-lg bg-[#087BFF] px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 transition-colors whitespace-nowrap"
                       >
-                        Simular Assinatura Agora ✓
+                        Registrar assinatura ✓
                       </button>
                     </div>
                   )}
@@ -707,7 +768,7 @@ export const GlobalModals: React.FC = () => {
                 <div>
                   <h3 className="text-sm font-bold">{whatsAppTargetCliente.nome}</h3>
                   <p className="text-[11px] text-emerald-100 font-mono-tabular">
-                    {whatsAppTargetCliente.telefone} · WhatsApp MK Motos
+                    {whatsAppTargetCliente.telefone}
                   </p>
                 </div>
               </div>
@@ -723,19 +784,22 @@ export const GlobalModals: React.FC = () => {
             </div>
 
             <div className="bg-[#ECE5DD] p-4 space-y-3 max-h-72 overflow-y-auto text-xs">
-              <div className="rounded-lg bg-white p-3 shadow-xs text-slate-700 max-w-[85%]">
-                <p className="font-semibold text-emerald-800 mb-0.5">Histórico Automático MK</p>
-                Olá {whatsAppTargetCliente.nome.split(' ')[0]}, seu contrato{' '}
-                {whatsAppTargetCliente.contratoAtualId ? 'está ativo' : 'foi atualizado'}. Próximo
-                vencimento programado: <strong>{whatsAppTargetCliente.proximoPagamentoData}</strong>.
+              <div className="rounded-lg bg-white p-3 shadow-xs text-slate-700 max-w-[90%]">
+                <p className="font-semibold text-emerald-800 mb-0.5">Situação do cliente</p>
+                {whatsAppTargetCliente.contratoAtualId ? 'Contrato ativo. ' : 'Sem contrato ativo. '}
+                {whatsAppTargetCliente.proximoPagamentoValor > 0 ? (
+                  <>
+                    Próximo pagamento: <strong>{brl(whatsAppTargetCliente.proximoPagamentoValor)}</strong> em{' '}
+                    <strong>{whatsAppTargetCliente.proximoPagamentoData}</strong> ({whatsAppTargetCliente.status}).
+                  </>
+                ) : (
+                  'Nenhum pagamento em aberto.'
+                )}
               </div>
               {waSentLog.map((msg, i) => (
-                <div
-                  key={i}
-                  className="ml-auto rounded-lg bg-[#DCF8C6] p-3 shadow-xs text-slate-800 max-w-[85%]"
-                >
+                <div key={i} className="ml-auto rounded-lg bg-[#DCF8C6] p-3 shadow-xs text-slate-800 max-w-[85%]">
                   {msg}
-                  <div className="mt-1 text-right text-[10px] text-slate-500">Enviado ✓✓</div>
+                  <div className="mt-1 text-right text-[10px] text-slate-500">Aberto no WhatsApp</div>
                 </div>
               ))}
             </div>
@@ -745,59 +809,59 @@ export const GlobalModals: React.FC = () => {
                 <button
                   onClick={() =>
                     setWaMessage(
-                      `Olá ${whatsAppTargetCliente.nome.split(' ')[0]}! Lembrete MK Motos: sua parcela de R$ ${whatsAppTargetCliente.proximoPagamentoValor} vence dia ${whatsAppTargetCliente.proximoPagamentoData}. Chave PIX: financeiro@mkmotos.com.br`
+                      `Olá ${whatsAppTargetCliente.nome.split(' ')[0]}! Aqui é da ${nomeEmpresa}. Lembrete: o valor de ${brl(whatsAppTargetCliente.proximoPagamentoValor)} vence em ${whatsAppTargetCliente.proximoPagamentoData}.${config.empresa.pix ? ` Chave PIX: ${config.empresa.pix}` : ''}`
                     )
                   }
                   className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-200"
                 >
-                  Cobrança PIX
+                  Cobrança
                 </button>
                 <button
                   onClick={() =>
                     setWaMessage(
-                      `Olá ${whatsAppTargetCliente.nome.split(' ')[0]}! Sua moto está próxima da revisão preventiva na Oficina MK Motos. Qual melhor horário para agendar?`
+                      `Olá ${whatsAppTargetCliente.nome.split(' ')[0]}! Aqui é da ${nomeEmpresa}. Sua moto atingiu a quilometragem da troca de óleo/revisão. Qual o melhor horário para trazer na oficina?`
                     )
                   }
                   className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-200"
                 >
-                  Agendar Revisão
+                  Troca de óleo / revisão
                 </button>
                 <button
                   onClick={() =>
                     setWaMessage(
-                      `Olá ${whatsAppTargetCliente.nome.split(' ')[0]}! Seu contrato digital MK Motos está disponível para assinatura.`
+                      `Olá ${whatsAppTargetCliente.nome.split(' ')[0]}! Aqui é da ${nomeEmpresa}. Seu contrato de locação está pronto para assinatura.`
                     )
                   }
                   className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-200"
                 >
-                  Link do Contrato
+                  Contrato
                 </button>
               </div>
 
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
                   value={waMessage}
                   onChange={(e) => setWaMessage(e.target.value)}
                   className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-emerald-600 focus:outline-none"
                   placeholder="Digite a mensagem para o cliente..."
                 />
-                <button
+                <a
+                  href={linkWhatsApp(whatsAppTargetCliente.telefone, waMessage)}
+                  target="_blank"
+                  rel="noreferrer"
                   onClick={() => {
-                    if (!waMessage.trim()) return;
-                    setWaSentLog((prev) => [...prev, waMessage]);
-                    showToast(
-                      'Mensagem enviada no WhatsApp (Simulação) ✓',
-                      `Destinatário: ${whatsAppTargetCliente.nome}`
-                    );
-                    setWaMessage('');
+                    if (waMessage.trim()) setWaSentLog((prev) => [...prev, waMessage]);
                   }}
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  Enviar
-                </button>
+                  Abrir no WhatsApp
+                </a>
               </div>
+              <p className="text-[11px] text-slate-500">
+                Abre o WhatsApp (Web ou app) já com a mensagem pronta para o número {whatsAppTargetCliente.telefone}.
+              </p>
             </div>
           </div>
         </div>

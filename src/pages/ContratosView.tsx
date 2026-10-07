@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileText, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ContratoStatus } from '../types/mkMotos';
+import { brl } from '../lib/formato';
 
 export const ContratosView: React.FC = () => {
   const {
@@ -57,6 +58,12 @@ export const ContratosView: React.FC = () => {
         </div>
       </div>
 
+      {filtered.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+          Nenhum contrato neste filtro. Contratos são gerados em Aluguéis → Novo aluguel.
+        </div>
+      )}
+
       {/* TABELA DE CONTRATOS */}
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="overflow-x-auto">
@@ -68,6 +75,7 @@ export const ContratosView: React.FC = () => {
                 <th className="py-3.5 px-4">Moto</th>
                 <th className="py-3.5 px-4">Data / Vigência</th>
                 <th className="py-3.5 px-4 text-right">Valor</th>
+                <th className="py-3.5 px-4 text-right">Km com o cliente</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-5 text-right">Ação</th>
               </tr>
@@ -121,7 +129,16 @@ export const ContratosView: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-mono-tabular font-bold text-slate-900 whitespace-nowrap">
-                      R$ {ctr.valorMensal.toLocaleString('pt-BR')}
+                      {brl(ctr.valorMensal)}
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right font-mono-tabular text-slate-700 whitespace-nowrap">
+                      {Math.round(ctr.kmRodados ?? 0).toLocaleString('pt-BR')} km
+                      {(ctr.kmCiclosCobrados ?? 0) > 0 && (
+                        <span className="block text-[11px] text-[#087BFF]">
+                          {ctr.kmCiclosCobrados} ciclo(s) cobrado(s)
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 whitespace-nowrap">

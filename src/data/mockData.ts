@@ -8,15 +8,14 @@ import {
   Lead,
   CampanhaMarketing,
   AtividadeRecente,
-  AlertaSistema,
 } from '../types/mkMotos';
 
 export const MOTO_IMAGES = {
-  cg160: '/src/assets/images/moto_honda_cg160_1790719410558.jpg',
-  biz125: '/src/assets/images/moto_honda_biz125_1790719421681.jpg',
-  factor150: '/src/assets/images/moto_yamaha_factor150_1790719432255.jpg',
-  bros160: '/src/assets/images/moto_honda_bros160_1790719441926.jpg',
-  fazer250: '/src/assets/images/moto_yamaha_fazer250_1790719451265.jpg',
+  cg160: '/images/honda_cg160.jpg',
+  biz125: '/images/honda_biz125.jpg',
+  factor150: '/images/yamaha_factor150.jpg',
+  bros160: '/images/honda_bros160.jpg',
+  fazer250: '/images/yamaha_fazer250.jpg',
 };
 
 export const INITIAL_MOTOS: Moto[] = [
@@ -824,45 +823,4 @@ export const INITIAL_ATIVIDADES: AtividadeRecente[] = [
     tipo: 'cliente',
     referenciaId: 'cli-2',
   },
-];
-
-export const INITIAL_ALERTAS: AlertaSistema[] = [
-  {
-    id: 'alerta-1',
-    titulo: '3 pagamentos próximos do vencimento',
-    detalhe: 'Carlos Henrique (04/10), Marcos Oliveira (05/10) e Rafael Almeida (12/10)',
-    severidade: 'alta',
-    destinoTab: 'financeiro',
-  },
-  {
-    id: 'alerta-2',
-    titulo: '2 motos próximas da revisão',
-    detalhe: 'Honda CG 160 ABC-1234 (faltam 360 km) e Honda CG 160 STU-8821 (faltam 260 km)',
-    severidade: 'media',
-    destinoTab: 'manutencao',
-  },
-  {
-    id: 'alerta-3',
-    titulo: '1 contrato aguardando assinatura',
-    detalhe: 'Contrato CTR-2026-006 — Pedro Henrique (Yamaha Factor 150)',
-    severidade: 'info',
-    destinoTab: 'contratos',
-  },
-];
-
-export const RECEITA_SEMESTRAL = [
-  { mes: 'Mai', receita: 19800, despesas: 6200, motosAlugadas: 22 },
-  { mes: 'Jun', receita: 21900, despesas: 6500, motosAlugadas: 25 },
-  { mes: 'Jul', receita: 23600, despesas: 7100, motosAlugadas: 27 },
-  { mes: 'Ago', receita: 25400, despesas: 6900, motosAlugadas: 29 },
-  { mes: 'Set', receita: 26900, despesas: 7300, motosAlugadas: 31 },
-  { mes: 'Out', receita: 28450, despesas: 7450, motosAlugadas: 32 },
-];
-
-export const ORIGEM_LEADS_STATS = [
-  { origem: 'Instagram', quantidade: 38, percentual: 42, cor: '#E50914' },
-  { origem: 'WhatsApp', quantidade: 24, percentual: 27, cor: '#087BFF' },
-  { origem: 'Google', quantidade: 14, percentual: 15, cor: '#0B0B0B' },
-  { origem: 'Anúncios', quantidade: 9, percentual: 10, cor: '#475569' },
-  { origem: 'Indicação', quantidade: 5, percentual: 6, cor: '#94A3B8' },
 ];

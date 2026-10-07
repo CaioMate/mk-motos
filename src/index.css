@@ -32,6 +32,35 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Impressão do contrato: mostra só o documento */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .area-impressao,
+  .area-impressao * {
+    visibility: visible;
+  }
+  .modal-impressao {
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+  .area-impressao {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .nao-imprimir {
+    display: none !important;
+  }
+}
+
 /* Custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

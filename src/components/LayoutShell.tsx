@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   CheckCircle2,
   ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NavTab } from '../types/mkMotos';
@@ -47,7 +48,7 @@ const PRESENTATION_STEPS = [
   {
     step: 1,
     title: '1. Visão Geral no Dashboard',
-    description: 'Mostre ao proprietário os indicadores em tempo real: 40 motos na frota, 32 alugadas, 5 disponíveis e R$ 28.450 de receita.',
+    description: 'Mostre os indicadores em tempo real: motos na frota, alugadas, disponíveis, receita e alertas automáticos.',
     run: (ctx: ReturnType<typeof useApp>) => {
       ctx.setSelectedMotoId(null);
       ctx.setSelectedClienteId(null);
@@ -155,6 +156,9 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
     toasts,
     dismissToast,
     showToast,
+    alertas,
+    conexao,
+    config,
   } = appCtx;
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -268,6 +272,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
 
         {/* RODAPÉ DO MENU: MODO DEMONSTRAÇÃO + PERFIL ADMINISTRADOR */}
         <div className="p-4 border-t border-white/10 space-y-3 bg-[#0B0B0B]">
+          {config.modoDemonstracao && (
           <button
             onClick={() => {
               const nextState = !demoTourActive;
@@ -291,6 +296,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
             <Play className="h-3.5 w-3.5 fill-current" />
             <span>{demoTourActive ? 'Roteiro Guiado Ativo' : 'Modo demonstração'}</span>
           </button>
+          )}
 
           <div className="flex items-center gap-3 pt-1 px-1">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white border border-white/15 shrink-0">
@@ -413,8 +419,8 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 <div className="absolute left-0 right-0 mt-2 rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden z-40 max-h-96 overflow-y-auto">
                   {!hasSearchResults ? (
                     <div className="p-4 text-xs text-slate-500 text-center">
-                      Nenhum resultado encontrado para "{searchQuery}". Tente "CG 160", "João Silva"
-                      ou "ABC-1234".
+                      Nenhum resultado encontrado para "{searchQuery}". Busque por modelo, placa,
+                      nome, telefone, CPF ou número do contrato.
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
@@ -508,8 +514,15 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
 
           {/* Right Zone: Discreet DEMONSTRAÇÃO label + Notification Bell */}
           <div className="flex items-center gap-4">
-            <span className="hidden sm:inline-block text-[11px] font-mono-tabular font-semibold tracking-wider text-slate-400 select-none">
-              DEMONSTRAÇÃO
+            <span
+              className={`hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono-tabular font-semibold tracking-wider select-none ${
+                conexao === 'online' ? 'text-emerald-600' : 'text-[#E50914]'
+              }`}
+              title={conexao === 'online' ? 'Conectado ao servidor — dados atualizam sozinhos' : 'Sem conexão com o servidor'}
+            >
+              <span className={`h-2 w-2 rounded-full ${conexao === 'online' ? 'bg-emerald-500' : 'bg-[#E50914]'}`} />
+              {conexao === 'online' ? 'ONLINE' : 'OFFLINE'}
+              {config.modoDemonstracao && <span className="text-slate-400">· DEMONSTRAÇÃO</span>}
             </span>
 
             {/* SINO DE NOTIFICAÇÕES */}
@@ -520,77 +533,45 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 aria-label="Notificações do sistema"
               >
                 <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#E50914] text-[10px] font-bold text-white font-mono-tabular">
-                  3
-                </span>
+                {alertas.length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-0.5 items-center justify-center rounded-full bg-[#E50914] text-[10px] font-bold text-white font-mono-tabular">
+                    {alertas.length}
+                  </span>
+                )}
               </button>
 
               {notifOpen && (
                 <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-xl z-40 overflow-hidden">
                   <div className="flex items-center justify-between bg-[#0B0B0B] px-4 py-3 text-white">
                     <span className="text-xs font-bold">Notificações Operacionais</span>
-                    <span className="text-[11px] text-slate-400 font-mono-tabular">3 alertas</span>
+                    <span className="text-[11px] text-slate-400 font-mono-tabular">{alertas.length} alertas</span>
                   </div>
-                  <div className="divide-y divide-slate-100">
-                    <button
-                      onClick={() => {
-                        setActiveTab('financeiro');
-                        setNotifOpen(false);
-                      }}
-                      className="w-full p-4 text-left hover:bg-slate-50 transition-colors flex items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">
-                          3 pagamentos próximos do vencimento
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Carlos Henrique (04/10), Marcos Oliveira (05/10) e Rafael Almeida (12/10)
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-semibold text-[#E50914] shrink-0">
-                        Financeiro →
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveTab('manutencao');
-                        setNotifOpen(false);
-                      }}
-                      className="w-full p-4 text-left hover:bg-slate-50 transition-colors flex items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">
-                          2 motos precisam de revisão
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Honda CG 160 (ABC-1234) em 360 km · Honda CG 160 (STU-8821) em 260 km
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-semibold text-amber-600 shrink-0">
-                        Manutenção →
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveTab('contratos');
-                        setNotifOpen(false);
-                      }}
-                      className="w-full p-4 text-left hover:bg-slate-50 transition-colors flex items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">
-                          1 contrato aguardando assinatura
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          CTR-2026-006 — Pedro Henrique (Yamaha Factor 150)
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-semibold text-[#087BFF] shrink-0">
-                        Contratos →
-                      </span>
-                    </button>
+                  <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+                    {alertas.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => {
+                          setActiveTab(a.destinoTab);
+                          setNotifOpen(false);
+                        }}
+                        className="w-full p-4 text-left hover:bg-slate-50 transition-colors flex items-start justify-between gap-3"
+                      >
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{a.titulo}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">{a.detalhe}</p>
+                        </div>
+                        <span
+                          className={`text-[11px] font-semibold shrink-0 ${
+                            a.severidade === 'alta' ? 'text-[#E50914]' : a.severidade === 'media' ? 'text-amber-600' : 'text-[#087BFF]'
+                          }`}
+                        >
+                          {NAV_ITEMS.find((n) => n.id === a.destinoTab)?.label} →
+                        </span>
+                      </button>
+                    ))}
+                    {alertas.length === 0 && (
+                      <p className="p-4 text-xs text-slate-500">Nenhum alerta no momento ✓</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -662,7 +643,11 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
             onClick={() => dismissToast(t.id)}
             className="pointer-events-auto flex items-start gap-3 rounded-xl border border-white/15 bg-[#0B0B0B] px-4 py-3 text-white shadow-xl cursor-pointer transition-all"
           >
-            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+            {t.erro ? (
+              <AlertTriangle className="h-4 w-4 text-[#E50914] shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+            )}
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-white">{t.text}</p>
               {t.subtext && <p className="text-[11px] text-slate-300 mt-0.5">{t.subtext}</p>}

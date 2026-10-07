@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Banco de dados local (dados reais dos clientes — nunca enviar ao GitHub)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
