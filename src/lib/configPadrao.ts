@@ -3,7 +3,7 @@ import { ConfigSistema, PecaPlano } from '../types/mkMotos';
 // Valores iniciais — todos podem ser alterados em Configurações.
 export const CONFIG_PADRAO: ConfigSistema = {
   empresa: {
-    nome: 'MK MOTOS — Locação de Motocicletas',
+    nome: 'Minha Locadora',
     cnpj: '',
     telefone: '',
     pix: '',
@@ -48,7 +48,6 @@ export const CONFIG_PADRAO: ConfigSistema = {
     velocidadeMaxKmh: 160,
     distanciaMinimaM: 25,
   },
-  modoDemonstracao: true,
 };
 
 /** Garante que configs antigas salvas no banco recebam campos novos. */

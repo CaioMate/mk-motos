@@ -285,7 +285,6 @@ export interface ConfigSistema {
     /** Movimentos menores que isso são considerados ruído do GPS */
     distanciaMinimaM: number;
   };
-  modoDemonstracao: boolean;
 }
 
 export interface StatusIntegracoes {

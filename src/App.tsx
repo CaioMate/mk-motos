@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { PortaoSessao } from './context/SessaoContext';
 import { LayoutShell } from './components/LayoutShell';
 import { DashboardView } from './pages/DashboardView';
 import { FrotaView } from './pages/FrotaView';
@@ -48,10 +49,12 @@ const ActivePageRouter: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <LayoutShell>
-        <ActivePageRouter />
-      </LayoutShell>
-    </AppProvider>
+    <PortaoSessao>
+      <AppProvider>
+        <LayoutShell>
+          <ActivePageRouter />
+        </LayoutShell>
+      </AppProvider>
+    </PortaoSessao>
   );
 }

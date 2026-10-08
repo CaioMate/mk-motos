@@ -185,6 +185,13 @@ export const ClientesView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
+              {filteredClientes.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="py-10 px-4 text-center text-sm text-slate-500">
+                    Nenhum cliente por aqui ainda. Use o botão de novo cliente para cadastrar o primeiro.
+                  </td>
+                </tr>
+              )}
               {filteredClientes.map((cli) => {
                 const moto = motos.find((m) => m.id === cli.motoAtualId);
                 const ctr = contratos.find((c) => c.id === cli.contratoAtualId);

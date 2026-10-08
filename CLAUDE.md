@@ -13,13 +13,17 @@ A equipe de agentes é global (`~/.claude/agents`, regras em `~/.claude/CLAUDE.m
 - dev-frontend: nova aba = `NavTab` (`src/types/mkMotos.ts`) + item com `dica` em `LayoutShell.tsx` + `case` em `App.tsx`.
   Dados só via `useApp()`. Ícones `lucide-react`, animações `motion`.
 - banco-dados: não há SQL por tabela — `server/banco.ts` guarda cada documento como JSON no SQLite; novas
-  coleções/campos = tipos em `src/types/mkMotos.ts` + `Banco`. Dados de demonstração em `server/demonstracao.ts`.
+  coleções/campos = tipos em `src/types/mkMotos.ts` + `Banco`. NÃO existem dados de demonstração: banco novo começa vazio
+  (o dono cadastra tudo). Fotos das motos: arquivos em `<pasta do banco>/fotos/` (`Banco.pastaFotos`), servidas em
+  `/api/fotos/:arquivo`; `moto.foto` guarda `/api/fotos/<arquivo>` ou `''` (front mostra `FotoMoto` com ícone). Upload em
+  `POST /api/motos/:id/foto {base64, mime}` (jpeg/png/webp, até 5 MB; o front reduz para 1200px). `ação apagarTudo` zera tudo.
 - integracoes: GPS em `server/gps.ts` + `processarKm()`; WhatsApp em `server/whatsapp.ts`/`atendimento.ts`;
   IA em `server/agente.ts` (sem `ANTHROPIC_API_KEY` deve continuar funcionando). Nunca cobrar km duplicado.
 - testador: `npm run lint` → `npm run build` → `MKMOTOS_DB="$TEMP/mk-teste.db" PORT=8099 npm run dev` e
   `curl` em `/api/estado` e `POST /api/acoes/<nome>` (dado inválido → 400 `{ erro }`). Nunca `data/mkmotos.db`.
-- seguranca: painel sem login (só rede local); `/api/backup` entrega o banco inteiro; uploads de comprovantes
-  em `/api/manutencoes/:id/comprovante`.
+- seguranca: login por senha única via `SENHA_PAINEL` (`server/login.ts`: cookie HttpOnly assinado com HMAC, 30 dias,
+  5 erros/IP = bloqueio de 15 min). Com ela, toda `/api/*` exige sessão, exceto webhook WhatsApp, GPS e login. Sem ela:
+  só rede local (internet = 403). `/api/backup` entrega o banco inteiro; uploads em `/api/manutencoes/:id/comprovante`.
 - devops: scripts `iniciar-mk-motos.bat`, `liberar-firewall.bat`, `tunel-whatsapp.bat`. Backup = copiar
   `data/mkmotos.db` com o servidor parado, ou `GET /api/backup`.
 - publicar: o dono autorizou commit + push sem perguntar.

@@ -13,6 +13,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { formatBR, somarMeses } from '../lib/datas';
 import { brl } from '../lib/formato';
+import { FotoMoto } from '../components/FotoMoto';
 import { Aluguel, Contrato, FormaPagamento } from '../types/mkMotos';
 
 type Filtro = 'Todos' | 'Ativos' | 'Atrasados' | 'Aguardando assinatura' | 'Próximos' | 'Vencidos' | 'Finalizados';
@@ -304,6 +305,13 @@ export const AlugueisView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
+              {linhasFiltradas.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="py-10 px-4 text-center text-sm text-slate-500">
+                    Nenhum aluguel ainda. Cadastre uma moto e um cliente e depois use Novo aluguel.
+                  </td>
+                </tr>
+              )}
                 {linhasFiltradas.map(({ id, alu, ctr }) => {
                   const cli = clientes.find((c) => c.id === (alu?.clienteId ?? ctr?.clienteId));
                   const moto = motos.find((m) => m.id === (alu?.motoId ?? ctr?.motoId));
@@ -540,10 +548,10 @@ export const AlugueisView: React.FC = () => {
                             : 'border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <img
-                          src={m.foto}
+                        <FotoMoto
+                          foto={m.foto}
                           alt={m.modelo}
-                          referrerPolicy="no-referrer"
+                          iconeClassName="h-5 w-5"
                           className="h-12 w-16 rounded-lg object-cover shrink-0"
                         />
                         <div className="min-w-0">

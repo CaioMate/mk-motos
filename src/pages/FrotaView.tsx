@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext';
 import { Moto } from '../types/mkMotos';
 import { tempoRelativo } from '../lib/datas';
 import { brl } from '../lib/formato';
+import { FotoMoto } from '../components/FotoMoto';
+import { CampoFotoMoto } from '../components/CampoFotoMoto';
 
 type FrotaFilter = 'Todas' | 'Disponíveis' | 'Alugadas' | 'Manutenção' | 'Atrasadas' | 'Sem GPS';
 
@@ -23,7 +25,7 @@ const FORM_VAZIO = {
 const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900';
 
 export const FrotaView: React.FC = () => {
-  const { motos, clientes, setSelectedMotoId, navigateToCliente, addMoto, updateMotoDetails, registrarLeituraKm } =
+  const { motos, clientes, setSelectedMotoId, navigateToCliente, addMoto, updateMotoDetails, registrarLeituraKm, enviarFotoMoto } =
     useApp();
 
   const [search, setSearch] = useState('');
@@ -34,6 +36,7 @@ export const FrotaView: React.FC = () => {
   const [kmLeitura, setKmLeitura] = useState(0);
   const [form, setForm] = useState(FORM_VAZIO);
   const [salvando, setSalvando] = useState(false);
+  const [fotoNova, setFotoNova] = useState<File | null>(null);
 
   const q = search.toLowerCase();
   const filteredMotos = motos.filter((m) => {
@@ -63,11 +66,13 @@ export const FrotaView: React.FC = () => {
       kmAtual: Number(form.kmAtual),
       valorMensal: Number(form.valorMensal),
       valorSemanal: Number(form.valorSemanal),
+      fotoArquivo: fotoNova,
     });
     setSalvando(false);
     if (ok) {
       setAddModalOpen(false);
       setForm(FORM_VAZIO);
+      setFotoNova(null);
     }
   };
 
@@ -86,8 +91,12 @@ export const FrotaView: React.FC = () => {
       valorSemanal: editingMoto.valorSemanal,
       gpsImei: editingMoto.gpsImei ?? '',
     });
+    if (ok && fotoNova) await enviarFotoMoto(editingMoto.id, fotoNova);
     setSalvando(false);
-    if (ok) setEditingMoto(null);
+    if (ok) {
+      setEditingMoto(null);
+      setFotoNova(null);
+    }
   };
 
   const handleKm = async (e: React.FormEvent) => {
@@ -158,7 +167,9 @@ export const FrotaView: React.FC = () => {
 
       {filteredMotos.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-          Nenhuma moto encontrada. Use “Adicionar moto” para cadastrar a frota.
+          {motos.length === 0
+            ? 'Nenhuma moto cadastrada ainda. Clique em “Adicionar moto” para cadastrar a primeira (você pode já colocar a foto).'
+            : 'Nenhuma moto encontrada com esse filtro ou busca.'}
         </div>
       )}
 
@@ -188,10 +199,9 @@ export const FrotaView: React.FC = () => {
                   onClick={() => setSelectedMotoId(moto.id)}
                   className="relative aspect-4/3 bg-slate-900 overflow-hidden cursor-pointer"
                 >
-                  <img
-                    src={moto.foto}
+                  <FotoMoto
+                    foto={moto.foto}
                     alt={moto.modelo}
-                    referrerPolicy="no-referrer"
                     className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4 flex items-end justify-between text-white">
@@ -349,6 +359,9 @@ export const FrotaView: React.FC = () => {
                   <label className="block font-semibold text-slate-700 mb-1">IMEI / ID do rastreador GPS</label>
                   <input value={form.gpsImei} placeholder="Ex: 864893030000001 (deixe vazio se ainda não instalou)" onChange={(e) => setForm({ ...form, gpsImei: e.target.value.trim() })} className={`${inputCls} font-mono-tabular`} />
                 </div>
+                <div className="col-span-2">
+                  <CampoFotoMoto arquivo={fotoNova} onChange={setFotoNova} />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -415,6 +428,9 @@ export const FrotaView: React.FC = () => {
                     Com o IMEI cadastrado, o sistema soma sozinho os km rodados, cobra o cliente a cada ciclo de km e avisa as trocas de óleo e peças.
                     Veja como conectar em Configurações → GPS.
                   </p>
+                </div>
+                <div className="col-span-2">
+                  <CampoFotoMoto arquivo={fotoNova} onChange={setFotoNova} fotoAtual={editingMoto.foto} />
                 </div>
               </div>
               <p className="text-[11px] text-slate-500">

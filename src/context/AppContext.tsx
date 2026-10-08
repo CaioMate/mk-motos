@@ -18,6 +18,8 @@ import {
   FormaPagamento,
 } from '../types/mkMotos';
 import { calcularAlertas } from '../lib/indicadores';
+import { EVENTO_SESSAO_EXPIRADA } from './SessaoContext';
+import { reduzirImagem } from '../lib/imagem';
 
 export interface ToastMessage {
   id: string;
@@ -77,7 +79,10 @@ interface AppContextType {
     valorMensal: number;
     valorSemanal?: number;
     gpsImei?: string;
+    /** Foto escolhida pelo dono (reduzida e enviada logo após o cadastro) */
+    fotoArquivo?: File | null;
   }) => Promise<boolean>;
+  enviarFotoMoto: (motoId: string, arquivo: File) => Promise<boolean>;
   updateMotoDetails: (motoId: string, updates: Partial<Moto>) => Promise<boolean>;
   registrarLeituraKm: (motoId: string, kmAtual: number) => Promise<boolean>;
 
@@ -144,8 +149,7 @@ interface AppContextType {
   enviarMensagemWhatsApp: (payload: { clienteId?: string; telefone?: string; texto: string }) => Promise<boolean>;
 
   salvarConfig: (config: Partial<ConfigSistema>) => Promise<boolean>;
-  limparDemonstracao: () => Promise<boolean>;
-  restaurarDemonstracao: () => Promise<boolean>;
+  apagarTudo: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -158,6 +162,7 @@ async function chamarApi(nome: string, payload: unknown) {
     body: JSON.stringify(payload ?? {}),
   });
   const json = await r.json().catch(() => ({ erro: 'Resposta inválida do servidor.' }));
+  if (r.status === 401) window.dispatchEvent(new Event(EVENTO_SESSAO_EXPIRADA));
   if (!r.ok) throw new Error(json.erro || `Erro ${r.status}`);
   return json as { mensagem?: string; sub?: string; resultado?: unknown; estado: EstadoSistema };
 }
@@ -190,6 +195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const carregar = useCallback(async () => {
     try {
       const r = await fetch('/api/estado');
+      if (r.status === 401) window.dispatchEvent(new Event(EVENTO_SESSAO_EXPIRADA));
       if (!r.ok) throw new Error();
       setEstado(await r.json());
       setConexao('online');
@@ -216,10 +222,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [carregar]);
 
+  const ultimoResultado = useRef<unknown>(undefined);
+
   const executar = useCallback(
     async (nome: string, payload: unknown): Promise<boolean> => {
       try {
         const r = await chamarApi(nome, payload);
+        ultimoResultado.current = r.resultado;
         setEstado(r.estado);
         setConexao('online');
         if (r.mensagem) showToast(r.mensagem, r.sub);
@@ -236,6 +245,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     },
     [showToast]
+  );
+
+  /** Reduz a foto no navegador e envia para o servidor (padrão do anexarComprovante). */
+  const enviarFoto = useCallback(
+    async (motoId: string, arquivo: File): Promise<boolean> => {
+      try {
+        const { base64, mime } = await reduzirImagem(arquivo);
+        return await executar(`/api/motos/${motoId}/foto`, { base64, mime });
+      } catch (e) {
+        showToast('Não foi possível enviar a foto', e instanceof Error ? e.message : String(e), true);
+        return false;
+      }
+    },
+    [executar, showToast]
   );
 
   const alertas = useMemo(() => (estado ? calcularAlertas(estado) : []), [estado]);
@@ -317,7 +340,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         navigateToCliente,
         navigateToContrato,
         updateMotoStatus: (motoId, status) => executar('updateMotoStatus', { motoId, status }),
-        addMoto: (novaMoto) => executar('addMoto', novaMoto),
+        addMoto: async ({ fotoArquivo, ...novaMoto }) => {
+          const ok = await executar('addMoto', novaMoto);
+          if (!ok || !fotoArquivo) return ok;
+          const id = (ultimoResultado.current as { id?: string } | undefined)?.id;
+          if (id) await enviarFoto(id, fotoArquivo);
+          return true;
+        },
+        enviarFotoMoto: (motoId, arquivo) => enviarFoto(motoId, arquivo),
         updateMotoDetails: (motoId, updates) => executar('updateMotoDetails', { motoId, updates }),
         registrarLeituraKm: (motoId, kmAtual) => executar('registrarLeituraKm', { motoId, kmAtual }),
         addCliente: (novoCliente) => executar('addCliente', novoCliente),
@@ -349,8 +379,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reenviarAvisoTroca: (manutencaoId) => executar('reenviarAvisoTroca', { manutencaoId }),
         enviarMensagemWhatsApp: (payload) => executar('enviarMensagemWhatsApp', payload),
         salvarConfig: (config) => executar('salvarConfig', { config }),
-        limparDemonstracao: () => executar('limparDemonstracao', {}),
-        restaurarDemonstracao: () => executar('restaurarDemonstracao', {}),
+        apagarTudo: () => executar('apagarTudo', { confirmacao: 'APAGAR' }),
       }}
     >
       {children}

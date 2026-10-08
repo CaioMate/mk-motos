@@ -37,6 +37,8 @@ export class Banco {
   private sequencia = 0;
   /** Pasta onde ficam os comprovantes recebidos (fotos/PDF) */
   readonly pastaComprovantes: string;
+  /** Pasta onde ficam as fotos das motos enviadas pelo dono */
+  readonly pastaFotos: string;
   /** Preenchido pelo servidor: estado das integrações externas */
   statusIntegracoes: () => StatusIntegracoes = () => ({ whatsappConfigurado: false, iaConfigurada: false, filaPendente: 0 });
 
@@ -44,6 +46,8 @@ export class Banco {
     fs.mkdirSync(path.dirname(arquivo), { recursive: true });
     this.pastaComprovantes = path.join(path.dirname(arquivo), 'comprovantes');
     fs.mkdirSync(this.pastaComprovantes, { recursive: true });
+    this.pastaFotos = path.join(path.dirname(arquivo), 'fotos');
+    fs.mkdirSync(this.pastaFotos, { recursive: true });
     this.db = new DatabaseSync(arquivo);
     this.criarTabelas();
     this.carregar();
@@ -171,9 +175,25 @@ export class Banco {
     }
   }
 
+  /** Apaga o arquivo de uma foto de moto (aceita '/api/fotos/<arquivo>'). */
+  apagarArquivoFoto(foto?: string) {
+    const nome = path.basename(foto ?? '');
+    if (!/^[\w-]+\.(jpg|png|webp)$/.test(nome)) return;
+    try {
+      fs.rmSync(path.join(this.pastaFotos, nome), { force: true });
+    } catch {
+      /* arquivo em uso ou já removido: ignora */
+    }
+  }
+
+  private apagarFotosArquivos() {
+    for (const f of fs.readdirSync(this.pastaFotos)) this.apagarArquivoFoto(f);
+  }
+
   apagarTudo() {
     for (const c of COLECOES) this.db.exec(`DELETE FROM ${c}`);
     this.db.exec(`DELETE FROM gps_posicoes`);
+    this.apagarFotosArquivos();
     this.carregar();
   }
 

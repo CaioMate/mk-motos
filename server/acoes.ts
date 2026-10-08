@@ -15,7 +15,6 @@ import type {
 import { competenciaDe, dataValidaBR, formatBR, hojeBR, parseBR } from '../src/lib/datas';
 import { brl, cpfValido, formatarCpf, somenteDigitos } from '../src/lib/formato';
 import { completarConfig } from '../src/lib/configPadrao';
-import { MOTO_IMAGES } from '../src/data/mockData';
 import type { Banco } from './banco';
 import {
   ErroNegocio,
@@ -28,7 +27,6 @@ import {
   textoAvisoTroca,
   verificarPlanoDePecas,
 } from './automacao';
-import { carregarDemonstracao } from './demonstracao';
 import { enfileirar } from './whatsapp';
 
 export interface ResultadoAcao {
@@ -57,15 +55,6 @@ const obter = <T extends { id: string }>(b: Banco, c: Parameters<Banco['lista']>
 
 const proximoNumero = (codigos: string[]) =>
   codigos.reduce((max, c) => Math.max(max, parseInt(c.match(/(\d+)$/)?.[1] ?? '0', 10)), 0) + 1;
-
-function fotoPadrao(modelo: string) {
-  const m = modelo.toLowerCase();
-  if (m.includes('biz')) return MOTO_IMAGES.biz125;
-  if (m.includes('factor')) return MOTO_IMAGES.factor150;
-  if (m.includes('bros')) return MOTO_IMAGES.bros160;
-  if (m.includes('fazer')) return MOTO_IMAGES.fazer250;
-  return MOTO_IMAGES.cg160;
-}
 
 function validarPlaca(b: Banco, placa: string, ignorarId?: string) {
   exigir(/^[A-Z]{3}-?\d[A-Z0-9]\d{2}$/.test(placa), 'Placa inválida. Use o formato ABC-1234 ou ABC1D23.');
@@ -122,12 +111,12 @@ export const ACOES: Record<string, Acao> = {
       valorSemanal: p.valorSemanal ? numero(p.valorSemanal, 'Valor semanal') : Math.round(valorMensal / 3.5),
       valorMensal,
       status: 'DISPONÍVEL',
-      foto: texto(p.foto) || fotoPadrao(modelo),
+      foto: '',
       gpsImei: imei || undefined,
       pecasUltimaTrocaKm: Object.fromEntries(b.config.planoPecas.map((pc) => [pc.id, kmAtual])),
     };
     b.salvar('motos', moto);
-    return { mensagem: 'Nova motocicleta adicionada à frota ✓', sub: `${moto.modelo} • ${moto.placa}` };
+    return { mensagem: 'Nova motocicleta adicionada à frota ✓', sub: `${moto.modelo} • ${moto.placa}`, resultado: { id: moto.id } };
   },
 
   updateMotoDetails(b, p) {
@@ -729,17 +718,10 @@ export const ACOES: Record<string, Acao> = {
     return { mensagem: 'Configurações salvas ✓' };
   },
 
-  limparDemonstracao(b) {
+  apagarTudo(b, p) {
+    exigir(p.confirmacao === 'APAGAR', 'Confirmação ausente. Nada foi apagado.');
     b.apagarTudo();
-    b.salvarConfig({ ...b.config, modoDemonstracao: false });
-    return { mensagem: 'Dados de demonstração apagados ✓', sub: 'O sistema está pronto para seus dados reais.' };
-  },
-
-  restaurarDemonstracao(b) {
-    b.apagarTudo();
-    carregarDemonstracao(b);
-    b.salvarConfig({ ...b.config, modoDemonstracao: true });
-    return { mensagem: 'Dados de demonstração carregados ✓' };
+    return { mensagem: 'Todos os dados foram apagados ✓', sub: 'O sistema está vazio, pronto para recomeçar.' };
   },
 };
 

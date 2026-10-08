@@ -17,8 +17,10 @@ import {
   ShieldCheck,
   AlertTriangle,
   MessageCircle,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useSessao } from '../context/SessaoContext';
 import { NavTab } from '../types/mkMotos';
 import { GlobalModals } from './GlobalModals';
 import { DicaFlutuante } from './DicaFlutuante';
@@ -44,6 +46,7 @@ const NAV_ITEMS: NavItemConfig[] = [
 ];
 
 export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { exigeLogin, sair } = useSessao();
   const appCtx = useApp();
   const {
     activeTab,
@@ -374,23 +377,32 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
             </div>
           </div>
 
-          {/* Right Zone: Discreet DEMONSTRAÇÃO label + Notification Bell */}
+          {/* Right Zone: Connection status + Notification Bell */}
           <div className="flex items-center gap-4">
             <span
               className={`hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono-tabular font-semibold tracking-wider select-none ${
                 conexao === 'online' ? 'text-emerald-600' : 'text-[#E50914]'
               }`}
               data-dica={
-                (conexao === 'online'
+                conexao === 'online'
                   ? 'Conectado ao servidor — os dados atualizam sozinhos.'
-                  : 'Sem conexão com o servidor. Verifique se o computador do sistema está ligado.') +
-                (config.modoDemonstracao ? ' DEMONSTRAÇÃO: os dados são de exemplo; apague em Configurações.' : '')
+                  : 'Sem conexão com o servidor. Verifique se o computador do sistema está ligado.'
               }
             >
               <span className={`h-2 w-2 rounded-full ${conexao === 'online' ? 'bg-emerald-500' : 'bg-[#E50914]'}`} />
               {conexao === 'online' ? 'ONLINE' : 'OFFLINE'}
-              {config.modoDemonstracao && <span className="text-slate-400">· DEMONSTRAÇÃO</span>}
             </span>
+
+            {exigeLogin && (
+              <button
+                onClick={sair}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
+                data-dica="Sair do sistema. Na próxima vez será preciso digitar a senha de novo. Use ao acessar de um computador que não é seu."
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sair</span>
+              </button>
+            )}
 
             {/* SINO DE NOTIFICAÇÕES */}
             <div className="relative" ref={notifRef}>

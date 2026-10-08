@@ -4,14 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Banco } from './banco';
-import { ErroNegocio, executarRotinas, migrarDados } from './automacao';
+import { ErroNegocio, executarRotinas, migrarDados, registrarAtividade } from './automacao';
 import { executarAcao } from './acoes';
-import { carregarDemonstracao } from './demonstracao';
 import { normalizarLeitura, rastreadoresDesconhecidos, registrarPosicao } from './gps';
 import { assinaturaValida, filaPendente, processarFila, tokenVerificacao, whatsappConfigurado } from './whatsapp';
 import { iaConfigurada } from './agente';
 import { processarWebhook, registrarComprovante } from './atendimento';
-import type { ManutencaoItem } from '../src/types/mkMotos';
+import { exigeLogin, porteiro, rotasLogin } from './login';
+import type { ManutencaoItem, Moto } from '../src/types/mkMotos';
 
 const RAIZ = path.resolve(import.meta.dirname, '..');
 if (fs.existsSync(path.join(RAIZ, '.env'))) process.loadEnvFile(path.join(RAIZ, '.env'));
@@ -22,10 +22,6 @@ const ARQUIVO_BANCO = process.env.MKMOTOS_DB || path.join(RAIZ, 'data', 'mkmotos
 
 // ---------------------------------------------------------------- banco
 const banco = new Banco(ARQUIVO_BANCO);
-if (banco.vazio()) {
-  console.log('Primeiro uso: carregando dados de demonstração (apague em Configurações > Banco de dados).');
-  banco.transacao(() => carregarDemonstracao(banco));
-}
 banco.transacao(() => {
   migrarDados(banco);
   executarRotinas(banco);
@@ -68,13 +64,9 @@ app.disable('x-powered-by');
 // Acesso vindo da internet (túnel Cloudflare/ngrok/proxy): só o webhook do WhatsApp e o GPS ficam abertos.
 // O painel, com dados de clientes, só abre na rede local.
 const ROTAS_PUBLICAS = [/^\/api\/whatsapp\/webhook\b/, /^\/api\/gps(\/(osmand|traccar))?\/?$/];
-app.use((req, res, next) => {
-  const viaInternet = !!(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.headers['cf-ray']);
-  if (viaInternet && !ROTAS_PUBLICAS.some((r) => r.test(req.path))) {
-    return res.status(403).send('Acesso ao painel permitido somente pela rede local.');
-  }
-  next();
-});
+// Com SENHA_PAINEL definida, a internet é liberada mediante login (server/login.ts).
+app.set('trust proxy', true);
+app.use(porteiro(ROTAS_PUBLICAS));
 
 app.use(
   express.json({
@@ -87,6 +79,7 @@ app.use(
 app.use(express.urlencoded({ extended: true }));
 
 const api = express.Router();
+rotasLogin(api);
 
 function responderErro(res: Response, e: unknown) {
   if (e instanceof ErroNegocio) return res.status(400).json({ erro: e.message });
@@ -152,6 +145,47 @@ api.post('/whatsapp/webhook', (req, res) => {
   if (!assinaturaValida(corpoBruto, req.header('x-hub-signature-256'))) return res.sendStatus(401);
   res.sendStatus(200); // a Meta exige resposta rápida; o processamento continua em segundo plano
   processarWebhook(banco, req.body, notificarMudanca).catch((e) => console.error('[WhatsApp] webhook:', e));
+});
+
+// Fotos das motos (enviadas pelo dono)
+api.get('/fotos/:arquivo', (req, res) => {
+  const nome = path.basename(req.params.arquivo);
+  const caminho = path.join(banco.pastaFotos, nome);
+  if (!/^[\w-]+\.(jpg|png|webp)$/.test(nome) || !fs.existsSync(caminho)) return res.sendStatus(404);
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.sendFile(caminho);
+});
+
+const EXTENSAO_FOTO: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+api.post('/motos/:id/foto', (req, res) => {
+  try {
+    const { base64, mime } = req.body as { base64?: string; mime?: string };
+    const ext = EXTENSAO_FOTO[mime ?? ''];
+    if (!base64 || !ext) throw new ErroNegocio('Envie uma foto nos formatos JPG, PNG ou WebP.');
+    const dados = Buffer.from(base64, 'base64');
+    if (dados.length === 0) throw new ErroNegocio('Foto vazia. Escolha outra imagem.');
+    if (dados.length > 5 * 1024 * 1024) throw new ErroNegocio('Foto muito grande (máximo 5 MB).');
+    const moto = banco.lista<Moto>('motos').find((m) => m.id === req.params.id);
+    if (!moto) throw new ErroNegocio('Moto não encontrada.');
+    const arquivo = `${moto.id}-${Date.now()}.${ext}`;
+    const anterior = moto.foto;
+    banco.transacao(() => {
+      fs.writeFileSync(path.join(banco.pastaFotos, arquivo), dados);
+      moto.foto = `/api/fotos/${arquivo}`;
+      banco.salvar('motos', moto);
+      registrarAtividade(banco, {
+        titulo: `Foto atualizada — ${moto.modelo}`,
+        subtitulo: `Placa ${moto.placa}`,
+        tipo: 'manutencao',
+        referenciaId: moto.id,
+      });
+    });
+    banco.apagarArquivoFoto(anterior);
+    notificarMudanca();
+    res.json({ mensagem: 'Foto da moto salva ✓', sub: `${moto.modelo} • ${moto.placa}`, estado: banco.estado() });
+  } catch (e) {
+    responderErro(res, e);
+  }
 });
 
 // Comprovantes (fotos/PDF) — só pela rede local
@@ -250,5 +284,10 @@ servidor.listen(PORTA, '0.0.0.0', () => {
   console.log(`  Banco de dados:     ${ARQUIVO_BANCO}`);
   console.log(`  WhatsApp (Meta):    ${whatsappConfigurado() ? 'configurado' : 'não configurado (veja Configurações > WhatsApp)'}`);
   console.log(`  Agente de IA:       ${iaConfigurada() ? 'configurado' : 'não configurado (ANTHROPIC_API_KEY)'}`);
+  console.log(
+    exigeLogin()
+      ? '  Login do painel:    ativado (SENHA_PAINEL) - pode usar pela internet'
+      : '  Login do painel:    DESLIGADO - só rede local. Para usar pela internet, defina SENHA_PAINEL no .env'
+  );
   console.log('');
 });

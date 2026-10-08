@@ -265,6 +265,9 @@ export const ComercialView: React.FC = () => {
           </div>
 
           <div className="mt-5 space-y-4">
+            {origens.length === 0 && (
+              <p className="py-6 text-center text-xs text-slate-500">Quando você cadastrar clientes e contatos, a origem deles aparece aqui.</p>
+            )}
             {origens.map((item) => (
               <div key={item.origem} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
@@ -300,6 +303,9 @@ export const ComercialView: React.FC = () => {
             </div>
 
             <div className="mt-4 space-y-3">
+              {campanhas.length === 0 && (
+                <p className="py-6 text-center text-xs text-slate-500">Nenhuma campanha cadastrada ainda.</p>
+              )}
               {campanhas.map((camp) => (
                 <div
                   key={camp.id}

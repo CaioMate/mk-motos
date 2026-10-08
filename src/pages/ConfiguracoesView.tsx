@@ -29,8 +29,7 @@ export const ConfiguracoesView: React.FC = () => {
     motos,
     estado,
     salvarConfig,
-    limparDemonstracao,
-    restaurarDemonstracao,
+    apagarTudo,
     enviarMensagemWhatsApp,
     showToast,
   } = useApp();
@@ -629,30 +628,22 @@ Corpo: Olá {{1}}! Aviso da {{2}}: {{3}}. Responda esta mensagem se tiver dúvid
             </a>
 
             <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 space-y-3">
-              <h3 className="text-sm font-bold text-[#E50914]">Começar a usar com dados reais</h3>
+              <h3 className="text-sm font-bold text-[#E50914]">Recomeçar do zero</h3>
               <p className="text-slate-700">
-                {config.modoDemonstracao
-                  ? 'O sistema está com DADOS DE DEMONSTRAÇÃO (clientes e motos fictícios). Apague-os antes de cadastrar sua frota e seus clientes.'
-                  : 'O sistema está com seus dados reais.'}
+                Apaga clientes, motos (com as fotos), contratos, pagamentos e posições do GPS. As configurações da empresa
+                ficam guardadas. Não dá para desfazer: baixe o backup antes.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => {
-                    if (window.confirm('Apagar TODOS os dados (clientes, motos, contratos, pagamentos, GPS)? Isso não pode ser desfeito. Faça um backup antes.')) {
-                      limparDemonstracao();
-                    }
+                    if (!window.confirm('Apagar TODOS os dados (clientes, motos, contratos, pagamentos, GPS)? Isso não pode ser desfeito. Faça um backup antes.')) return;
+                    if (!window.confirm('Última confirmação: tem certeza que quer apagar tudo e recomeçar do zero?')) return;
+                    apagarTudo();
                   }}
                   className="rounded-lg bg-[#E50914] px-4 py-2 font-semibold text-white hover:bg-red-700"
+                  data-dica="Apaga todos os cadastros para você recomeçar do zero. Pede confirmação duas vezes. Baixe o backup antes."
                 >
                   Apagar todos os dados e começar do zero
-                </button>
-                <button
-                  onClick={() => {
-                    if (window.confirm('Substituir TODOS os dados atuais pelos dados de demonstração?')) restaurarDemonstracao();
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Recarregar dados de demonstração
                 </button>
               </div>
             </div>

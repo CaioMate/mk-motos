@@ -261,6 +261,13 @@ export const FinanceiroView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
+              {lista.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="py-10 px-4 text-center text-sm text-slate-500">
+                    Nenhum lançamento ainda. As cobranças aparecem aqui quando você criar um aluguel.
+                  </td>
+                </tr>
+              )}
               {lista.map((pag) => {
                 const cli = clientes.find((c) => c.id === pag.clienteId);
                 const ctr = contratos.find((c) => c.id === pag.contratoId);

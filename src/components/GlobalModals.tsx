@@ -8,11 +8,13 @@ import {
   ArrowUpRight,
   Satellite,
   MapPin,
+  Camera,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MotoStatus } from '../types/mkMotos';
 import { brl, linkMapa, linkWhatsApp } from '../lib/formato';
 import { tempoRelativo } from '../lib/datas';
+import { FotoMoto } from './FotoMoto';
 
 export const GlobalModals: React.FC = () => {
   const {
@@ -36,6 +38,7 @@ export const GlobalModals: React.FC = () => {
     navigateToContrato,
     updateMotoStatus,
     assinarContrato,
+    enviarFotoMoto,
   } = useApp();
 
   const nomeEmpresa = config.empresa.nome || 'MK Motos';
@@ -104,12 +107,26 @@ export const GlobalModals: React.FC = () => {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
                 <div className="md:col-span-5">
                   <div className="relative aspect-4/3 overflow-hidden rounded-xl border border-slate-200 bg-slate-900">
-                    <img
-                      src={selectedMoto.foto}
-                      alt={selectedMoto.modelo}
-                      referrerPolicy="no-referrer"
-                      className="h-full w-full object-cover"
-                    />
+                    <FotoMoto foto={selectedMoto.foto} alt={selectedMoto.modelo} className="h-full w-full object-cover" />
+                    <label
+                      className="absolute bottom-2 right-2 inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-black/70 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-black/85 focus-within:ring-2 focus-within:ring-white"
+                      data-dica="Troque a foto desta moto: escolha uma imagem do computador ou tire uma foto pelo celular."
+                    >
+                      <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                      {selectedMoto.foto ? 'Trocar foto' : 'Adicionar foto'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="sr-only"
+                        aria-label="Foto da moto"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = '';
+                          if (f) enviarFotoMoto(selectedMoto.id, f);
+                        }}
+                      />
+                    </label>
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-slate-600 font-mono-tabular">
                     <span>Chassi: {selectedMoto.chassi}</span>
@@ -457,10 +474,10 @@ export const GlobalModals: React.FC = () => {
                   return (
                     <div className="rounded-xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3.5">
-                        <img
-                          src={motoAtual.foto}
+                        <FotoMoto
+                          foto={motoAtual.foto}
                           alt={motoAtual.modelo}
-                          referrerPolicy="no-referrer"
+                          iconeClassName="h-6 w-6"
                           className="h-14 w-20 rounded-lg object-cover border border-slate-200 shrink-0"
                         />
                         <div>
