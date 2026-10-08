@@ -9,6 +9,6 @@ description: Coloca a equipe de agentes dentro de um projeto (pasta .claude do r
    - Windows: `levar-para-projeto.bat "<pasta do projeto>"`
    - Mac/Linux/nuvem: `sh levar-para-projeto.sh "<pasta do projeto>"`
    Ele copia `agents/` e `skills/` para `<projeto>/.claude/` e cria `<projeto>/.claude/EQUIPE.md` com as regras de delegação.
-3. Garanta que o CLAUDE.md do projeto tenha a linha: `Equipe de agentes: siga @.claude/EQUIPE.md (delegue primeiro aos agentes de nível 1).`
+3. Garanta que o CLAUDE.md do projeto tenha a linha: `Equipe de agentes: delegue PRIMEIRO aos de nível 1 (rapido-*, explorador, testador); tabela em .claude/EQUIPE.md.`
    (Sem CLAUDE.md? Rode /adaptar-projeto antes.)
 4. Publique com /publicar (`.claude/` vai para o git; confira que nada sensível entrou).
