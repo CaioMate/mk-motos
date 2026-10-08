@@ -6,7 +6,7 @@ import { resumoFinanceiro, serieMensal } from '../lib/indicadores';
 import { brl, brlCurto, linkWhatsApp, pct } from '../lib/formato';
 import { competenciaDe, formatBR, parseBR, somarDias } from '../lib/datas';
 
-type Filtro = 'Em aberto' | 'Atrasados' | 'Pagos' | 'Km e peças' | 'Todos';
+type Filtro = 'Em aberto' | 'Atrasados' | 'Pagos' | 'Km (GPS)' | 'Todos';
 const FORMAS: FormaPagamento[] = ['PIX', 'Boleto', 'Cartão', 'Transferência'];
 const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900';
 
@@ -55,7 +55,7 @@ export const FinanceiroView: React.FC = () => {
       accent: 'red',
     },
     { label: 'Despesas do mês', value: brlCurto(fin.despesasMes), sub: 'Manutenções concluídas' },
-    { label: 'Cobranças km/peças', value: brlCurto(fin.totalCobrancasKm), sub: 'Geradas pelo GPS (total)' },
+    { label: 'Cobranças por km', value: brlCurto(fin.totalCobrancasKm), sub: 'Geradas pelo GPS (total)' },
   ];
 
   const ordenados = [...pagamentos].sort((a, b) => {
@@ -69,7 +69,7 @@ export const FinanceiroView: React.FC = () => {
     if (filtro === 'Em aberto') return p.status !== 'Pago';
     if (filtro === 'Atrasados') return p.status === 'Atrasado';
     if (filtro === 'Pagos') return p.status === 'Pago';
-    if (filtro === 'Km e peças') return p.tipo === 'Km rodado' || p.tipo === 'Peças / Manutenção';
+    if (filtro === 'Km (GPS)') return p.tipo === 'Km rodado';
     return true;
   });
 
@@ -135,7 +135,7 @@ export const FinanceiroView: React.FC = () => {
             Financeiro
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Mensalidades geradas automaticamente, cobranças por km do GPS, peças e inadimplência.
+            Mensalidades geradas automaticamente, cobranças por km do GPS e inadimplência.
           </p>
         </div>
 
@@ -232,7 +232,7 @@ export const FinanceiroView: React.FC = () => {
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-sm font-bold text-slate-900">Cobranças por cliente e contrato</h3>
           <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-xl overflow-x-auto">
-            {(['Em aberto', 'Atrasados', 'Km e peças', 'Pagos', 'Todos'] as Filtro[]).map((f) => (
+            {(['Em aberto', 'Atrasados', 'Km (GPS)', 'Pagos', 'Todos'] as Filtro[]).map((f) => (
               <button
                 data-dica="Filtra os lançamentos pela situação."
                 key={f}

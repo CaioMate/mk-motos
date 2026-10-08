@@ -10,8 +10,6 @@ import type {
 import { MESES_CURTOS, diasEntre, inicioDoDia, parseBR, parseCompetencia } from './datas';
 import { brl } from './formato';
 
-export const emAberto = (p: Pagamento) => p.status !== 'Pago';
-
 /** Mês de referência do pagamento: data em que foi pago, senão a competência. */
 function mesDoPagamento(p: Pagamento): { mes: number; ano: number } | null {
   const pago = parseBR(p.dataPagamento);
@@ -105,7 +103,7 @@ export function resumoFinanceiro(e: EstadoSistema) {
     })
     .reduce((s, m) => s + m.custo, 0);
   const clientesAtrasados = new Set(atrasados.map((p) => p.clienteId)).size;
-  const cobrancasKm = e.pagamentos.filter((p) => p.tipo === 'Km rodado' || p.tipo === 'Peças / Manutenção');
+  const cobrancasKm = e.pagamentos.filter((p) => p.tipo === 'Km rodado');
   const carteira = e.pagamentos.reduce((s, p) => s + p.valor, 0);
   return {
     recebidoMes,

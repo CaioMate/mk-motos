@@ -45,12 +45,11 @@ function montarTabela(id: IdRelatorio, e: EstadoSistema, km30: Record<string, nu
       };
     case 'km':
       return {
-        cabecalho: ['Contrato', 'Cliente', 'Moto', 'Status', 'Km na saída', 'Km rodados com o cliente', 'Ciclos de km cobrados', 'Cobrado por km', 'Cobrado por peças'],
+        cabecalho: ['Contrato', 'Cliente', 'Moto', 'Status', 'Km na saída', 'Km rodados com o cliente', 'Ciclos de km cobrados', 'Cobrado por km'],
         linhas: e.contratos.map((c) => {
           const m = moto(c.motoId);
           const porKm = e.pagamentos.filter((p) => p.contratoId === c.id && p.tipo === 'Km rodado').reduce((s, p) => s + p.valor, 0);
-          const porPeca = e.pagamentos.filter((p) => p.contratoId === c.id && p.tipo === 'Peças / Manutenção').reduce((s, p) => s + p.valor, 0);
-          return [c.numero, cli(c.clienteId), `${m?.modelo ?? ''} ${m?.placa ?? ''}`, c.status, c.kmInicial !== undefined ? fmtKm(c.kmInicial) : '—', fmtKm(c.kmRodados ?? 0), c.kmCiclosCobrados ?? 0, brl(porKm), brl(porPeca)];
+          return [c.numero, cli(c.clienteId), `${m?.modelo ?? ''} ${m?.placa ?? ''}`, c.status, c.kmInicial !== undefined ? fmtKm(c.kmInicial) : '—', fmtKm(c.kmRodados ?? 0), c.kmCiclosCobrados ?? 0, brl(porKm)];
         }),
       };
     case 'manutencao':
@@ -126,7 +125,7 @@ export const RelatoriosView: React.FC = () => {
     { id: 'financeiro', title: 'Relatório financeiro', subtitle: 'Todas as cobranças, pagamentos e atrasos.', metric: `${brlCurto(fin.recebidoMes)} recebidos no mês · ${pct(fin.inadimplencia)} inadimplência` },
     { id: 'clientes', title: 'Base de clientes', subtitle: 'Cadastro completo com CPF, CNH, contato e saldo.', metric: `${estado.clientes.length} clientes cadastrados` },
     { id: 'alugueis', title: 'Relatório de aluguéis', subtitle: 'Locações, planos, valores e vigência.', metric: `${ativos.length} ativos · ticket médio ${brlCurto(ticket)}` },
-    { id: 'km', title: 'Km rodados por cliente (GPS)', subtitle: 'Km de cada contrato e o que foi cobrado por km e peças.', metric: `${fmtKm(kmTotal)} km rodados em contratos` },
+    { id: 'km', title: 'Km rodados por cliente (GPS)', subtitle: 'Km de cada contrato e o que foi cobrado por km.', metric: `${fmtKm(kmTotal)} km rodados em contratos` },
     { id: 'manutencao', title: 'Relatório de manutenção', subtitle: 'Serviços, trocas automáticas e custos.', metric: `${brl(custoManut)} gastos em oficina` },
     { id: 'comercial', title: 'Relatório comercial', subtitle: 'Leads, origem e etapa do funil.', metric: `${pct(taxaConversao(estado))} de conversão` },
   ];
