@@ -420,8 +420,18 @@ export const ConfiguracoesView: React.FC = () => {
                 <p className="mt-1">{integracoes.whatsappConfigurado ? 'Conectado ✓' : 'Não configurado'}</p>
               </div>
               <div className={`rounded-xl border p-4 ${integracoes.iaConfigurada ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                <p className="font-bold text-slate-900">Agente de IA (Claude)</p>
-                <p className="mt-1">{integracoes.iaConfigurada ? 'Ativo ✓ — lê comprovantes e responde' : 'Sem chave — respostas automáticas simples'}</p>
+                <p className="font-bold text-slate-900">
+                  Agente de IA ({integracoes.iaProvedor === 'claude' ? 'Claude' : integracoes.iaProvedor === 'gemini' ? 'Gemini, grátis' : 'sem chave'})
+                </p>
+                <p className="mt-1">
+                  {integracoes.iaProvedor === 'claude'
+                    ? 'Ativo ✓ — lê comprovantes e responde'
+                    : integracoes.iaProvedor === 'gemini'
+                    ? 'Ativo ✓ — lê comprovantes e responde (plano grátis do Google; se falhar, usa o leitor de texto)'
+                    : integracoes.iaProvedor === 'ocr'
+                    ? 'Sem chave — respostas simples; fotos de comprovante lidas pelo leitor de texto grátis (PDF fica para você). Para IA grátis, coloque GEMINI_API_KEY no .env'
+                    : 'Sem chave — respostas automáticas simples'}
+                </p>
               </div>
               <div className="rounded-xl border border-slate-200 p-4">
                 <p className="font-bold text-slate-900">Fila de envio</p>
@@ -470,7 +480,8 @@ export const ConfiguracoesView: React.FC = () => {
 WHATSAPP_PHONE_NUMBER_ID=id do número (WhatsApp > Configuração da API)
 WHATSAPP_VERIFY_TOKEN=uma senha qualquer que você inventa
 WHATSAPP_APP_SECRET=chave secreta do app (Configurações do app > Básico)
-ANTHROPIC_API_KEY=chave da API do Claude (console.anthropic.com)`}</pre>
+GEMINI_API_KEY=chave GRÁTIS do Google (aistudio.google.com > Get API key; o Google pode usar os dados do plano grátis)
+ANTHROPIC_API_KEY=(opcional, pago) chave da API do Claude (console.anthropic.com)`}</pre>
                   Depois feche e abra o sistema de novo.
                 </li>
                 <li>

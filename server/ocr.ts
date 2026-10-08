@@ -101,14 +101,20 @@ export async function lerTextoDaImagem(dados: Buffer, tempoMaxMs = TEMPO_MAX_OCR
   const cachePath = path.join(os.tmpdir(), 'mkmotos-tessdata');
   let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
   let relogio: NodeJS.Timeout | undefined;
+  let encerrado = false; // limite estourou: o worker, se ainda nascer, deve ser desligado
   const limite = new Promise<never>((_, rej) => {
     relogio = setTimeout(() => {
+      encerrado = true;
       void worker?.terminate().catch(() => {});
       rej(new Error(`OCR passou de ${Math.round(tempoMaxMs / 1000)} s`));
     }, tempoMaxMs);
   });
   const trabalho = (async () => {
     worker = await createWorker('por', 1, { cachePath, logger: () => {} });
+    if (encerrado) {
+      await worker.terminate();
+      throw new Error('OCR cancelado');
+    }
     const r = await worker.recognize(dados);
     return r.data.text ?? '';
   })();
@@ -116,6 +122,7 @@ export async function lerTextoDaImagem(dados: Buffer, tempoMaxMs = TEMPO_MAX_OCR
   try {
     return await Promise.race([trabalho, limite]);
   } finally {
+    encerrado = true;
     clearTimeout(relogio);
     void (worker as { terminate(): Promise<unknown> } | null)?.terminate().catch(() => {});
   }

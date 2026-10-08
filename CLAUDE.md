@@ -76,7 +76,11 @@ A equipe de agentes é global (repo `CaioMate/equipe-agentes`, instalada em `~/.
   `WHATSAPP_TEMPLATE` (3 parâmetros: nome, empresa, texto). Webhook em `/api/whatsapp/webhook` (assinatura
   X-Hub-Signature-256 com `WHATSAPP_APP_SECRET`); processamento em `server/atendimento.ts`.
 - Agente (server/agente.ts): Claude `claude-opus-5-5`; comprovante via `messages.parse` + zod; respostas via
-  `beta.messages.create` com `fallbacks: 'default'`. Sem `ANTHROPIC_API_KEY` usa respostas fixas.
+  `beta.messages.create` com `fallbacks: 'default'`. Provedores em cascata (falha/429 passa ao próximo): Claude (`ANTHROPIC_API_KEY`) → Gemini
+  (`GEMINI_API_KEY`, grátis, `@google/genai` `generateContent`, modelo `gemini-3.8-flash` ou `GEMINI_MODEL`, JSON schema do mesmo zod, imagem/PDF inline; também responde
+  o WhatsApp) → OCR local `server/ocr.ts` (`tesseract.js` idioma por, só imagens, 25 s, regras puras em `analisarTexto`; dados em `os.tmpdir()`).
+  `AnaliseComprovante.fonte` ('claude'|'gemini'|'ocr') aparece na Manutenção; `provedorDeLeitura()` alimenta `iaProvedor` em Configurações. Sem nada: vai para o dono.
+  `build:vercel` mantém `tesseract.js` external e copia o pacote + deps para `api.func/node_modules` (o worker precisa de arquivo em disco). `OCR_DESATIVADO=1` desliga o OCR.
 - Aprovação automática de comprovantes (`config.manutencao.aprovacaoAutomatica`, padrão true): `registrarComprovante` →
   `anexarEConferir` (`server/atendimento.ts`) chama `pendenciasDoComprovante` (`server/comprovantes.ts`, funções puras: IA diz que confere,
   oficina com nome tolerante, data entre abertura−3 dias e hoje, km entre km da ordem−300 e km atual+300, SHA-256 do arquivo inédito). Lista vazia →
