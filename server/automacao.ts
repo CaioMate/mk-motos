@@ -20,6 +20,8 @@ import {
 import { brl } from '../src/lib/formato';
 import type { Banco } from './banco';
 import { avisarDono, enfileirar } from './whatsapp';
+import { fecharViagensParadas } from './gps';
+import { limpezaAutomatica } from './retencao';
 
 export class ErroNegocio extends Error {}
 
@@ -402,4 +404,6 @@ export function executarRotinas(b: Banco) {
   iniciarPlanoDePecas(b);
   gerarMensalidades(b);
   sincronizarStatus(b);
+  fecharViagensParadas(b);
+  limpezaAutomatica(b);
 }

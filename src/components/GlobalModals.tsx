@@ -15,6 +15,7 @@ import { MotoStatus } from '../types/mkMotos';
 import { brl, linkMapa, linkWhatsApp } from '../lib/formato';
 import { tempoRelativo } from '../lib/datas';
 import { FotoMoto } from './FotoMoto';
+import { TrajetosMoto } from './TrajetosMoto';
 
 export const GlobalModals: React.FC = () => {
   const {
@@ -218,6 +219,10 @@ export const GlobalModals: React.FC = () => {
                       </div>
                     );
                   })()}
+
+                  {selectedMoto.gpsImei && (
+                    <TrajetosMoto motoId={selectedMoto.id} ultimaPosicao={selectedMoto.gpsUltimaPosicao?.dataHora} />
+                  )}
 
                   {/* Cliente Atual Conectado */}
                   {(() => {

@@ -249,6 +249,7 @@ export const ManutencaoView: React.FC = () => {
                         <span className={comp.status === 'aprovado' ? 'text-emerald-600' : comp.status === 'recusado' ? 'text-[#E50914]' : 'text-[#087BFF]'}>
                           {comp.status === 'pendente' ? 'aguardando sua conferência' : comp.status}
                         </span>
+                        {comp.aprovadoPor && <span className="text-slate-500"> ({comp.aprovadoPor === 'automatico' ? 'automático' : 'pelo dono'})</span>}
                       </p>
                       {comp.analise ? (
                         <div className="text-slate-600">
@@ -265,6 +266,9 @@ export const ManutencaoView: React.FC = () => {
                         </div>
                       ) : (
                         <p className="text-slate-500">Sem leitura automática (configure a IA em Configurações → WhatsApp e agente). Abra a imagem para conferir.</p>
+                      )}
+                      {comp.status === 'pendente' && comp.pendencias && comp.pendencias.length > 0 && (
+                        <p className="text-amber-700">Não aprovado sozinho: {comp.pendencias.join(' · ')}</p>
                       )}
                       {comp.motivoRecusa && <p className="text-[#E50914]">Motivo da recusa: {comp.motivoRecusa}</p>}
                     </div>

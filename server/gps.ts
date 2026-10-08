@@ -1,4 +1,4 @@
-import type { Cliente, Moto, PosicaoGps } from '../src/types/mkMotos';
+import type { Cliente, Moto, PosicaoGps, ViagemGps, ViagensDoPeriodo } from '../src/types/mkMotos';
 import { linkMapa } from '../src/lib/formato';
 import type { Banco } from './banco';
 import { ErroNegocio, processarKm, registrarAtividade } from './automacao';
@@ -73,6 +73,8 @@ export interface LeituraGps {
   lon: number;
   velocidadeKmh?: number;
   odometroKm?: number;
+  /** true/false quando o rastreador informa a ignição; undefined (app de celular) = detecta por movimento */
+  ignicao?: boolean;
   dataHora: string;
 }
 
@@ -80,6 +82,17 @@ const num = (v: unknown): number | undefined => {
   if (v === undefined || v === null || v === '') return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
+};
+
+/** Aceita true/false, 1/0, 'on'/'off', 'true'/'false'. Qualquer outra coisa = não informado. */
+const booleano = (v: unknown): boolean | undefined => {
+  if (typeof v === 'boolean') return v;
+  if (v === 1 || v === 0) return v === 1;
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim().toLowerCase();
+  if (['true', '1', 'on', 'yes', 'sim'].includes(t)) return true;
+  if (['false', '0', 'off', 'no', 'nao', 'não'].includes(t)) return false;
+  return undefined;
 };
 
 function dataDe(v: unknown): string {
@@ -107,6 +120,7 @@ export function normalizarLeitura(corpo: Record<string, any>, query: Record<stri
       lon: num(p.longitude),
       velocidadeKmh: num(p.speed) !== undefined ? num(p.speed)! * 1.852 : undefined,
       odometroKm: totalM !== undefined ? totalM / 1000 : undefined,
+      ignicao: booleano(p.attributes?.ignition),
       dataHora: dataDe(p.fixTime ?? p.deviceTime),
     };
   } else if (q.location && (q.device_id || q.deviceId)) {
@@ -119,6 +133,7 @@ export function normalizarLeitura(corpo: Record<string, any>, query: Record<stri
       lon: num(c.longitude),
       velocidadeKmh: num(c.speed) !== undefined && num(c.speed)! >= 0 ? num(c.speed)! * 3.6 : undefined,
       odometroKm: num(loc.odometer) !== undefined ? num(loc.odometer)! / 1000 : undefined,
+      ignicao: booleano(loc.extras?.ignition ?? loc.attributes?.ignition),
       dataHora: dataDe(loc.timestamp),
     };
   } else if (q.velocidadeKmh !== undefined || q.imei || q.motoId) {
@@ -129,6 +144,7 @@ export function normalizarLeitura(corpo: Record<string, any>, query: Record<stri
       lon: num(q.lon ?? q.lng ?? q.longitude),
       velocidadeKmh: num(q.velocidadeKmh),
       odometroKm: num(q.odometroKm),
+      ignicao: booleano(q.ignicao ?? q.ignition),
       dataHora: dataDe(q.dataHora ?? q.timestamp),
     };
   } else {
@@ -140,6 +156,7 @@ export function normalizarLeitura(corpo: Record<string, any>, query: Record<stri
       lon: num(q.lon ?? q.longitude),
       velocidadeKmh: num(q.speed) !== undefined ? num(q.speed)! * 1.852 : undefined,
       odometroKm: odo !== undefined ? odo / 1000 : undefined,
+      ignicao: booleano(q.ignition ?? q.ignicao),
       dataHora: dataDe(q.timestamp),
     };
   }
@@ -176,6 +193,101 @@ export function encontrarMoto(b: Banco, identificador: string): Moto | undefined
     );
 }
 
+const MIN = 60_000;
+const SEM_SINAL_IGNICAO_MS = 12 * 60 * MIN; // viagem com ignição ligada e sem nenhuma posição há 12 h: considera encerrada
+
+/**
+ * Viagens, de forma incremental (uma leitura de cada vez; nada é recalculado).
+ * - Rastreador que informa ignição: liga = começa, desliga = termina (origem 'ignicao').
+ * - Sem ignição (app de celular): começa quando passa de config.gps.velocidadeMovimentoKmh (ou desloca de verdade);
+ *   termina depois de config.gps.minutosParadaFimViagem parada (origem 'movimento').
+ * Os km vêm do mesmo cálculo da cobrança (delta), então nunca divergem; a cobrança em si não muda.
+ */
+function atualizarViagens(b: Banco, motoId: string, antes: PosicaoGps | undefined, atual: PosicaoGps, delta: number) {
+  if (antes && Date.parse(atual.dataHora) < Date.parse(antes.dataHora)) return; // posição atrasada: só fica no histórico
+  const regra = b.config.gps;
+  const t = Date.parse(atual.dataHora);
+  let aberta = b.viagemAberta(motoId);
+  const fechar = (fim: string) => {
+    if (aberta) b.atualizarViagem(aberta.id, { fim });
+    aberta = undefined;
+  };
+
+  // velocidade conhecida ou deduzida do deslocamento entre as duas últimas posições
+  let vel = atual.velocidadeKmh;
+  if (vel === undefined && antes) {
+    const dt = (t - Date.parse(antes.dataHora)) / 3.6e6;
+    const d = distanciaKm(antes, atual);
+    if (dt > 0 && d * 1000 >= regra.distanciaMinimaM && d / dt <= regra.velocidadeMaxKmh) vel = d / dt;
+  }
+
+  if (atual.ignicao !== undefined) {
+    if (aberta && aberta.origem === 'movimento') fechar(aberta.ultimoMov);
+    if (aberta && t - Date.parse(aberta.ultimoMov) > SEM_SINAL_IGNICAO_MS) fechar(aberta.ultimoMov);
+    if (atual.ignicao) {
+      aberta ??= b.abrirViagem(motoId, atual.dataHora, 'ignicao');
+      b.atualizarViagem(aberta.id, { km: delta, vel, ultimoMov: atual.dataHora });
+    } else if (aberta) {
+      b.atualizarViagem(aberta.id, { km: delta, vel, ultimoMov: atual.dataHora, fim: atual.dataHora });
+    }
+    return;
+  }
+
+  const paradoMs = regra.minutosParadaFimViagem * MIN;
+  if (aberta && aberta.origem === 'ignicao') aberta = undefined; // misto: deixa a viagem por ignição quieta
+  const movendo = (vel ?? 0) > regra.velocidadeMovimentoKmh;
+  if (aberta && t - Date.parse(aberta.ultimoMov) > paradoMs) fechar(aberta.ultimoMov);
+  if (movendo) {
+    if (!aberta) {
+      const colar = antes && t - Date.parse(antes.dataHora) <= paradoMs; // começa no ponto parado anterior
+      aberta = b.abrirViagem(motoId, colar ? antes!.dataHora : atual.dataHora, 'movimento');
+    }
+    b.atualizarViagem(aberta.id, { km: delta, vel, ultimoMov: atual.dataHora });
+  } else if (aberta) {
+    b.atualizarViagem(aberta.id, { km: delta });
+  }
+}
+
+/** Fecha viagens por movimento paradas há mais que o limite (chamado nas rotinas). */
+export function fecharViagensParadas(b: Banco) {
+  const agora = Date.now();
+  b.fecharViagensParadas(
+    new Date(agora - b.config.gps.minutosParadaFimViagem * MIN).toISOString(),
+    new Date(agora - SEM_SINAL_IGNICAO_MS).toISOString()
+  );
+}
+
+/** Viagens de uma moto no período, já com duração e totais (nº de viagens = quantas vezes ligou). */
+export function viagensDaMoto(b: Banco, motoId: string, de: string, ate: string): ViagensDoPeriodo {
+  const agora = Date.now();
+  const paradoMs = b.config.gps.minutosParadaFimViagem * MIN;
+  const viagens: ViagemGps[] = b.viagensDoPeriodo(motoId, de, ate).map((v) => {
+    let fim = v.fim;
+    // movimento sem novas posições há mais que o limite: já terminou no último movimento (a rotina só grava depois)
+    if (!fim && v.origem === 'movimento' && agora - Date.parse(v.ultimoMov) > paradoMs) fim = v.ultimoMov;
+    const ateQuando = fim ?? v.ultimoMov;
+    return {
+      id: v.id,
+      motoId: v.motoId,
+      inicio: v.inicio,
+      fim,
+      km: Math.round(v.km * 100) / 100,
+      duracaoMin: Math.max(0, Math.round((Date.parse(ateQuando) - Date.parse(v.inicio)) / MIN)),
+      velocidadeMaxKmh: Math.round(v.velMax),
+      origem: v.origem,
+    };
+  });
+  return {
+    viagens,
+    totais: {
+      viagens: viagens.length,
+      km: Math.round(viagens.reduce((s, v) => s + v.km, 0) * 100) / 100,
+      minutosRodando: viagens.reduce((s, v) => s + v.duracaoMin, 0),
+      velocidadeMaxKmh: viagens.reduce((m, v) => Math.max(m, v.velocidadeMaxKmh), 0),
+    },
+  };
+}
+
 /**
  * Registra a posição e soma a distância percorrida.
  * - Se o rastreador informa hodômetro, usa a diferença do hodômetro (mais preciso).
@@ -202,6 +314,7 @@ export function registrarPosicao(b: Banco, leitura: LeituraGps) {
     lon: leitura.lon,
     velocidadeKmh: leitura.velocidadeKmh,
     odometroKm: leitura.odometroKm,
+    ignicao: leitura.ignicao,
     dataHora: leitura.dataHora,
   };
   const ref = moto.gpsReferencia;
@@ -234,7 +347,9 @@ export function registrarPosicao(b: Banco, leitura: LeituraGps) {
       clienteId: moto.clienteAtualId,
       kmSomados: delta,
     });
-    const primeiraVez = !moto.gpsUltimaPosicao;
+    const anterior = moto.gpsUltimaPosicao;
+    atualizarViagens(b, moto.id, anterior, atual, delta);
+    const primeiraVez = !anterior;
     moto.gpsUltimaPosicao = atual;
     moto.gpsReferencia = novaRef;
     b.salvar('motos', moto);

@@ -45,6 +45,9 @@ A equipe de agentes é global (repo `CaioMate/equipe-agentes`, instalada em `~/.
   uploads até 3 MB (limite de 4,5 MB da Vercel). Obrigatórias: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SENHA_PAINEL, SESSAO_SEGREDO (faltando = 503 claro).
   Limitações: GPS (trajeto/relatório de km) fica no /tmp de cada instância; envios simultâneos de duas instâncias podem se sobrepor (último grava); um WhatsApp
   pendente pode sair em dobro se ação e cron coincidirem. Para testar: gere o pacote e importe `index.mjs` num `http.createServer` com um Supabase falso.
+- Decisão: produção = servidor 24h (Oracle Cloud VM, `server/index.ts`, SQLite + Supabase como cópia); Vercel é secundário.
+- GPS/viagens: `gps_viagens` (SQLite, não vai ao Supabase) é atualizada de forma incremental em `registrarPosicao` (`atualizarViagens` em `server/gps.ts`): com `ignition` (true/false) a viagem = ligada→desligada (origem `ignicao`); sem ele, começa acima de `config.gps.velocidadeMovimentoKmh` e termina após `minutosParadaFimViagem` parado (origem `movimento`). Km da viagem = mesmo delta da cobrança (não cobra nada). API (login): `GET /api/gps/viagens/:motoId?de=&ate=` (padrão hoje, UTC-3) e `GET /api/gps/pontos/:motoId?de=&ate=&max=`. Tela: `src/components/TrajetosMoto.tsx` (Leaflet + tiles OSM, no modal da moto; tile.openstreetmap.org está na CSP das duas listas).
+- Retenção LGPD: `server/retencao.ts` (`limpezaAutomatica`, chamada em `executarRotinas`, 1x/dia via meta `limpeza-ultima`), prazo `config.retencaoMeses` (24): apaga GPS/viagens, mensagens, atividades e clientes encerrados há mais que o prazo e sem pendência (com contratos, aluguéis, pagamentos, leads convertidos e arquivos do WhatsApp). Motos nunca. Remoções vão ao Supabase pela fila normal (`Banco.remover`/`apagarArquivo`).
 - publicar: o dono autorizou commit + push sem perguntar.
 
 ## Comandos
@@ -74,6 +77,12 @@ A equipe de agentes é global (repo `CaioMate/equipe-agentes`, instalada em `~/.
   X-Hub-Signature-256 com `WHATSAPP_APP_SECRET`); processamento em `server/atendimento.ts`.
 - Agente (server/agente.ts): Claude `claude-opus-5-5`; comprovante via `messages.parse` + zod; respostas via
   `beta.messages.create` com `fallbacks: 'default'`. Sem `ANTHROPIC_API_KEY` usa respostas fixas.
+- Aprovação automática de comprovantes (`config.manutencao.aprovacaoAutomatica`, padrão true): `registrarComprovante` →
+  `anexarEConferir` (`server/atendimento.ts`) chama `pendenciasDoComprovante` (`server/comprovantes.ts`, funções puras: IA diz que confere,
+  oficina com nome tolerante, data entre abertura−3 dias e hoje, km entre km da ordem−300 e km atual+300, SHA-256 do arquivo inédito). Lista vazia →
+  `aprovarComprovanteDaOrdem` (`server/acoes.ts`, a mesma da ação do dono; `aprovadoPor: 'automatico'|'dono'`); senão grava `comprovante.pendencias`
+  (texto para o dono) e fica em_analise. Comprovantes antigos não têm `hash`. Na Vercel, GPS e webhook também chamam `rotinasSeVencidas()`.
+  O WhatsApp não tem restrição de horário (a janela de 23,5 h em `dentroDaJanela` só escolhe texto livre x modelo).
 - Cerca virtual: `config.cercaVirtual.cidades` (centro + raio), checada em `registrarPosicao`; `moto.foraDaArea`.
 - Requisições com cabeçalho de proxy (`cf-connecting-ip`/`x-forwarded-for`) só acessam webhook e GPS.
 - Telefones comparados por `chaveTelefone()` (DDD + últimos 8 dígitos) por causa do 9º dígito.

@@ -16,7 +16,7 @@ const ESQUEMA_COMPROVANTE = z.object({
   ehComprovante: z.boolean().describe('true se a imagem/arquivo é um comprovante, nota fiscal ou recibo de serviço'),
   estabelecimento: z.string().describe('Nome da oficina/loja que aparece no comprovante, ou "" se não houver'),
   data: z.string().describe('Data do serviço no formato dd/mm/aaaa, ou "" se não houver'),
-  servicos: z.array(z.string()).describe('Serviços e peças listados, ex.: "Troca de óleo", "Filtro de óleo"'),
+  servicos: z.array(z.string()).describe('Serviços e peças listados no documento, um item por linha, ex.: "Troca de óleo", "Filtro de óleo"; [] se não houver'),
   valorTotal: z.number().nullable().describe('Valor total em reais, ou null'),
   km: z.number().nullable().describe('Quilometragem anotada no comprovante, ou null'),
   confereComOficina: z.boolean().describe('true se o estabelecimento parece ser a oficina credenciada informada'),

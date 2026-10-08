@@ -11,6 +11,8 @@ import type {
 import { brl } from '../src/lib/formato';
 import type { Banco } from './banco';
 import { oficinaDaOrdem, registrarAtividade } from './automacao';
+import { aprovarComprovanteDaOrdem } from './acoes';
+import { hashDoArquivo, pendenciasDoComprovante } from './comprovantes';
 import { novoId } from './util';
 import { analisarComprovante, iaConfigurada, responderCliente } from './agente';
 import { avisarDono, baixarMidia, chaveTelefone, clientePorTelefone, enfileirar } from './whatsapp';
@@ -32,6 +34,34 @@ export function ordemAguardandoComprovante(b: Banco, cliente: Cliente | undefine
     .filter((m) => m.motoId === cliente.motoAtualId && !m.concluida && m.origem === 'automatica')
     .reverse();
   return abertas.find((m) => m.situacao !== 'em_analise') ?? abertas[0];
+}
+
+/** Anexa o comprovante à ordem e, se tudo conferir, aprova sozinho. Tudo em uma transação (sem rede). */
+export function anexarEConferir(b: Banco, itemId: string, comprovante: Comprovante) {
+  b.transacao(() => {
+    const atual = b.lista<ManutencaoItem>('manutencoes').find((m) => m.id === itemId)!;
+    const moto = b.lista<Moto>('motos').find((m) => m.id === atual.motoId);
+    atual.comprovantes = [...(atual.comprovantes ?? []), comprovante];
+    atual.situacao = 'em_analise';
+    b.salvar('manutencoes', atual);
+    // Conferência automática: se tudo bater, aprova sem o dono (mesma lógica da aprovação manual)
+    if (!b.config.manutencao.aprovacaoAutomatica) return;
+    const pendencias = pendenciasDoComprovante({
+      item: atual,
+      comprovante,
+      servicoEsperado: [atual.tipo, b.config.planoPecas.find((p) => p.id === atual.pecaId)?.nome ?? ''],
+      oficinaNome: oficinaDaOrdem(b, atual).nome,
+      kmMoto: moto?.kmAtual ?? atual.kmNaManutencao,
+      arquivoJaUsado: !!comprovante.hash && b
+        .lista<ManutencaoItem>('manutencoes')
+        .some((m) => (m.comprovantes ?? []).some((c) => c.id !== comprovante.id && c.hash === comprovante.hash)),
+    });
+    if (pendencias.length === 0) aprovarComprovanteDaOrdem(b, atual, comprovante, 'automatico');
+    else {
+      comprovante.pendencias = pendencias;
+      b.salvar('manutencoes', atual);
+    }
+  });
 }
 
 /** Salva o arquivo e anexa à ordem de manutenção, com a leitura da IA quando disponível. */
@@ -73,13 +103,9 @@ export async function registrarComprovante(
     origem,
     status: 'pendente',
     analise,
+    hash: hashDoArquivo(dados),
   };
-  b.transacao(() => {
-    const atual = b.lista<ManutencaoItem>('manutencoes').find((m) => m.id === item.id)!;
-    atual.comprovantes = [...(atual.comprovantes ?? []), comprovante];
-    atual.situacao = 'em_analise';
-    b.salvar('manutencoes', atual);
-  });
+  anexarEConferir(b, item.id, comprovante);
   return comprovante;
 }
 
@@ -206,6 +232,7 @@ async function processarMensagem(b: Banco, msg: MensagemMeta) {
       }
       const comp = await registrarComprovante(b, ordem, dados, mime, 'whatsapp');
       const moto = b.lista<Moto>('motos').find((m) => m.id === ordem.motoId);
+      if (comp.aprovadoPor === 'automatico') return; // já aprovado e cliente avisado (mesma mensagem da aprovação manual)
       b.transacao(() => {
         registrarAtividade(b, {
           titulo: `Comprovante recebido — ${cli.nome}`,
@@ -216,7 +243,8 @@ async function processarMensagem(b: Banco, msg: MensagemMeta) {
         const leitura = comp.analise
           ? ` Leitura automática: ${comp.analise.estabelecimento || 'estabelecimento não identificado'}, ${comp.analise.data || 'sem data'}, ${comp.analise.valorTotal != null ? brl(comp.analise.valorTotal) : 'sem valor'}. ${comp.analise.observacao}`
           : '';
-        avisarDono(b, `Comprovante de ${ordem.tipo.toLowerCase()} recebido de ${cli.nome} (${moto?.placa ?? ''}). Aprove em Manutenção no sistema.${leitura}`);
+        const motivos = comp.pendencias?.length ? ` Não aprovado sozinho: ${comp.pendencias.join('; ')}.` : '';
+        avisarDono(b, `Comprovante de ${ordem.tipo.toLowerCase()} recebido de ${cli.nome} (${moto?.placa ?? ''}). Aprove em Manutenção no sistema.${leitura}${motivos}`);
       });
       if (comp.analise && !comp.analise.ehComprovante) {
         responder('Recebemos sua imagem, mas ela não parece ser um comprovante do serviço. Se puder, envie uma foto nítida da nota ou recibo da oficina.', 'comprovante');

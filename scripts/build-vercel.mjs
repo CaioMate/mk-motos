@@ -55,7 +55,7 @@ fs.writeFileSync(
 // ATENÇÃO: manter igual a server/seguranca.ts (CSP e PERMISSIONS_POLICY).
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://nominatim.openstreetmap.org; " +
+  "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org; " +
   "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 const CABECALHOS = {
   'X-Content-Type-Options': 'nosniff',

@@ -129,6 +129,33 @@ export interface PosicaoGps {
   velocidadeKmh?: number;
   dataHora: string; // ISO
   odometroKm?: number;
+  /** Ignição ligada (só rastreadores físicos que informam) */
+  ignicao?: boolean;
+}
+
+/** Uma "viagem" = período em que a moto ficou ligada (ignição) ou em movimento */
+export interface ViagemGps {
+  id: number;
+  motoId: string;
+  inicio: string; // ISO
+  /** null = ainda em andamento */
+  fim: string | null;
+  km: number;
+  duracaoMin: number;
+  velocidadeMaxKmh: number;
+  origem: 'ignicao' | 'movimento';
+}
+
+export interface ViagensDoPeriodo {
+  viagens: ViagemGps[];
+  totais: { viagens: number; km: number; minutosRodando: number; velocidadeMaxKmh: number };
+}
+
+export interface PontoTrajeto {
+  lat: number;
+  lon: number;
+  dataHora: string;
+  velocidadeKmh?: number;
 }
 
 export interface Moto {
@@ -294,7 +321,13 @@ export interface ConfigSistema {
     velocidadeMaxKmh: number;
     /** Movimentos menores que isso são considerados ruído do GPS */
     distanciaMinimaM: number;
+    /** Sem ignição (app de celular): acima desta velocidade a moto é considerada em movimento */
+    velocidadeMovimentoKmh: number;
+    /** Sem ignição: a viagem termina depois de tantos minutos parada */
+    minutosParadaFimViagem: number;
   };
+  /** Meses que os dados antigos (GPS, mensagens, histórico, clientes encerrados) ficam guardados (LGPD) */
+  retencaoMeses: number;
 }
 
 export interface StatusIntegracoes {

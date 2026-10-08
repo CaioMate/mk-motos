@@ -47,6 +47,20 @@ export interface RegistroGps extends PosicaoGps {
   contratoId?: string;
   clienteId?: string;
   kmSomados: number;
+  ignicao?: boolean;
+}
+
+/** Linha da tabela gps_viagens (viagem = moto ligada/em movimento). fim null = em aberto. */
+export interface LinhaViagem {
+  id: number;
+  motoId: string;
+  inicio: string;
+  fim: string | null;
+  /** Última posição que confirmou ignição ligada/movimento (usada para fechar viagens por tempo parado) */
+  ultimoMov: string;
+  km: number;
+  velMax: number;
+  origem: 'ignicao' | 'movimento';
 }
 
 export class Banco {
@@ -114,6 +128,19 @@ export class Banco {
         recebido_em TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS ix_gps_moto ON gps_posicoes (moto_id, id);
+      CREATE INDEX IF NOT EXISTS ix_gps_moto_data ON gps_posicoes (moto_id, data_hora);
+
+      CREATE TABLE IF NOT EXISTS gps_viagens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        moto_id TEXT NOT NULL,
+        inicio TEXT NOT NULL,
+        fim TEXT,
+        ultimo_mov TEXT NOT NULL,
+        km REAL NOT NULL DEFAULT 0,
+        vel_max REAL NOT NULL DEFAULT 0,
+        origem TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS ix_viagens_moto ON gps_viagens (moto_id, inicio);
 
       -- Regras de unicidade (CPF, placa e IMEI não podem repetir)
       CREATE UNIQUE INDEX IF NOT EXISTS ux_clientes_cpf
@@ -125,6 +152,9 @@ export class Banco {
         ON motos (json_extract(dados, '$.gpsImei'))
         WHERE coalesce(json_extract(dados, '$.gpsImei'), '') <> '';
     `);
+    // coluna nova em bancos criados antes das viagens
+    const colunas = this.db.prepare(`PRAGMA table_info(gps_posicoes)`).all() as Array<{ name: string }>;
+    if (!colunas.some((c) => c.name === 'ignicao')) this.db.exec(`ALTER TABLE gps_posicoes ADD COLUMN ignicao INTEGER`);
   }
 
   carregar() {
@@ -238,6 +268,18 @@ export class Banco {
     this.marcar({ tipo: 'arquivo', caminho: `fotos/${nome}` });
   }
 
+  /** Apaga um arquivo (foto ou comprovante) do disco e, depois do COMMIT, do Storage do Supabase. */
+  apagarArquivo(pasta: 'fotos' | 'comprovantes', nome: string) {
+    const limpo = path.basename(nome ?? '');
+    if (!/^[\w.-]+$/.test(limpo) || limpo.startsWith('.')) return;
+    try {
+      fs.rmSync(path.join(this.pastaBase, pasta, limpo), { force: true });
+    } catch {
+      /* já removido ou em uso */
+    }
+    this.marcar({ tipo: 'arquivo', caminho: `${pasta}/${limpo}` });
+  }
+
   private apagarFotosArquivos() {
     for (const f of fs.readdirSync(this.pastaFotos)) this.apagarArquivoFoto(f);
   }
@@ -249,6 +291,7 @@ export class Banco {
       this.db.exec(`DELETE FROM ${c}`);
     }
     this.db.exec(`DELETE FROM gps_posicoes`);
+    this.db.exec(`DELETE FROM gps_viagens`);
     this.apagarFotosArquivos();
     this.marcar({ tipo: 'limparPasta', caminho: 'fotos' }); // fotos que só existem no Storage
     this.carregar();
@@ -560,8 +603,8 @@ export class Banco {
     this.db
       .prepare(
         `INSERT INTO gps_posicoes
-          (moto_id, contrato_id, cliente_id, lat, lon, velocidade_kmh, odometro_km, km_somados, data_hora, recebido_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          (moto_id, contrato_id, cliente_id, lat, lon, velocidade_kmh, odometro_km, km_somados, data_hora, recebido_em, ignicao)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         r.motoId,
@@ -573,8 +616,81 @@ export class Banco {
         r.odometroKm ?? null,
         r.kmSomados,
         r.dataHora,
-        new Date().toISOString()
+        new Date().toISOString(),
+        r.ignicao === undefined ? null : r.ignicao ? 1 : 0
       );
+  }
+
+  // ---------- Viagens (moto ligada / em movimento)
+
+  private linhaViagem(l: Record<string, unknown>): LinhaViagem {
+    return {
+      id: l.id as number,
+      motoId: l.moto_id as string,
+      inicio: l.inicio as string,
+      fim: (l.fim as string | null) ?? null,
+      ultimoMov: l.ultimo_mov as string,
+      km: l.km as number,
+      velMax: l.vel_max as number,
+      origem: l.origem as 'ignicao' | 'movimento',
+    };
+  }
+
+  viagemAberta(motoId: string): LinhaViagem | undefined {
+    const l = this.db.prepare(`SELECT * FROM gps_viagens WHERE moto_id = ? AND fim IS NULL ORDER BY id DESC LIMIT 1`).get(motoId);
+    return l ? this.linhaViagem(l as Record<string, unknown>) : undefined;
+  }
+
+  abrirViagem(motoId: string, inicio: string, origem: 'ignicao' | 'movimento'): LinhaViagem {
+    const r = this.db
+      .prepare(`INSERT INTO gps_viagens (moto_id, inicio, ultimo_mov, origem) VALUES (?, ?, ?, ?)`)
+      .run(motoId, inicio, inicio, origem);
+    return { id: Number(r.lastInsertRowid), motoId, inicio, fim: null, ultimoMov: inicio, km: 0, velMax: 0, origem };
+  }
+
+  /** Soma km/velocidade e, se informado, avança o último movimento e/ou fecha a viagem. */
+  atualizarViagem(id: number, p: { km?: number; vel?: number; ultimoMov?: string; fim?: string }) {
+    this.db
+      .prepare(
+        `UPDATE gps_viagens SET km = km + ?, vel_max = MAX(vel_max, ?), ultimo_mov = coalesce(?, ultimo_mov), fim = coalesce(?, fim) WHERE id = ?`
+      )
+      .run(p.km ?? 0, p.vel ?? 0, p.ultimoMov ?? null, p.fim ?? null, id);
+  }
+
+  /** Viagens que encostam no período [de, ate]. */
+  viagensDoPeriodo(motoId: string, de: string, ate: string): LinhaViagem[] {
+    return (
+      this.db
+        .prepare(`SELECT * FROM gps_viagens WHERE moto_id = ? AND inicio <= ? AND (fim IS NULL OR fim >= ?) ORDER BY inicio`)
+        .all(motoId, ate, de) as Array<Record<string, unknown>>
+    ).map((l) => this.linhaViagem(l));
+  }
+
+  /** Viagens esquecidas em aberto (moto parou / rastreador sem sinal): fecha no último movimento conhecido. */
+  fecharViagensParadas(limiteMovimentoIso: string, limiteIgnicaoIso: string): number {
+    const a = this.db.prepare(`UPDATE gps_viagens SET fim = ultimo_mov WHERE fim IS NULL AND origem = 'movimento' AND ultimo_mov < ?`).run(limiteMovimentoIso);
+    const b = this.db.prepare(`UPDATE gps_viagens SET fim = ultimo_mov WHERE fim IS NULL AND origem = 'ignicao' AND ultimo_mov < ?`).run(limiteIgnicaoIso);
+    return Number(a.changes) + Number(b.changes);
+  }
+
+  /** Pontos de um período, em ordem. Se passar de `max`, mantém pontos espaçados (sempre com o primeiro e o último). */
+  pontosDoPeriodo(motoId: string, de: string, ate: string, max = 600): Array<{ lat: number; lon: number; dataHora: string; velocidadeKmh?: number }> {
+    const linhas = this.db
+      .prepare(`SELECT lat, lon, velocidade_kmh, data_hora FROM gps_posicoes WHERE moto_id = ? AND data_hora >= ? AND data_hora <= ? ORDER BY data_hora, id`)
+      .all(motoId, de, ate) as Array<{ lat: number; lon: number; velocidade_kmh: number | null; data_hora: string }>;
+    let sel = linhas;
+    if (linhas.length > max) {
+      const passo = (linhas.length - 1) / (max - 1);
+      sel = Array.from({ length: max }, (_, i) => linhas[Math.round(i * passo)]);
+    }
+    return sel.map((l) => ({ lat: l.lat, lon: l.lon, dataHora: l.data_hora, velocidadeKmh: l.velocidade_kmh ?? undefined }));
+  }
+
+  /** Retenção (LGPD): apaga posições e viagens anteriores à data. Devolve quantos registros foram apagados. */
+  apagarGpsAnterior(limiteIso: string): number {
+    const a = this.db.prepare(`DELETE FROM gps_posicoes WHERE data_hora < ?`).run(limiteIso);
+    const b = this.db.prepare(`DELETE FROM gps_viagens WHERE coalesce(fim, ultimo_mov) < ?`).run(limiteIso);
+    return Number(a.changes) + Number(b.changes);
   }
 
   trajeto(motoId: string, desdeIso: string, limite = 2000): RegistroGps[] {

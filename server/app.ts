@@ -7,7 +7,7 @@ import type { Banco } from './banco';
 import { ErroNuvem } from './nuvem';
 import { ErroNegocio, executarRotinas, migrarDados, registrarAtividade } from './automacao';
 import { executarAcao, existeAcao } from './acoes';
-import { normalizarLeitura, rastreadoresDesconhecidos, registrarPosicao } from './gps';
+import { normalizarLeitura, rastreadoresDesconhecidos, registrarPosicao, viagensDaMoto } from './gps';
 import { assinaturaValida, filaPendente, segredoWhatsappConfigurado, processarFila, tokenVerificacao, whatsappConfigurado } from './whatsapp';
 import { iaConfigurada } from './agente';
 import { processarWebhook, registrarComprovante } from './atendimento';
@@ -90,6 +90,15 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
     notificarMudanca();
   }
   const rotinasVencidas = () => !(Date.now() - Date.parse(banco.meta('rotinas-ultima') ?? '') < INTERVALO_ROTINAS_MS);
+  /** Só na Vercel (sem temporizador): roda as rotinas se faz mais de 15 min. Falhar aqui nunca derruba a requisição. */
+  async function rotinasSeVencidas() {
+    if (!vercel || !rotinasVencidas()) return;
+    try {
+      await rodarRotinas();
+    } catch (e) {
+      console.error('[rotinas] não consegui salvar:', e instanceof Error ? e.message : e);
+    }
+  }
 
   // ---------------------------------------------------------------- aplicativo
   const app = express();
@@ -193,13 +202,7 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
 
   api.get('/estado', async (_req, res) => {
     try {
-      if (vercel && rotinasVencidas()) {
-        try {
-          await rodarRotinas();
-        } catch (e) {
-          console.error('[rotinas] não consegui salvar:', e instanceof Error ? e.message : e);
-        }
-      }
+      await rotinasSeVencidas();
       res.json(banco.estado());
     } catch (e) {
       responderErro(res, e);
@@ -236,6 +239,7 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
     try {
       const leitura = normalizarLeitura(req.body, req.query as Record<string, unknown>);
       const r = registrarPosicao(banco, leitura);
+      await rotinasSeVencidas(); // na Vercel o GPS chega o dia todo: aproveita para manter as rotinas em dia
       await concluirGravacao();
       notificarMudanca();
       res.json({ ok: true, ...r });
@@ -267,6 +271,7 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
     // Se não der para salvar, responde 503 e a Meta reenvia (mensagens repetidas são ignoradas pelo id).
     try {
       await processarWebhook(banco, req.body, notificarMudanca);
+      await rotinasSeVencidas();
       await concluirGravacao();
       res.sendStatus(200);
     } catch (e) {
@@ -324,8 +329,8 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
       await concluirGravacao();
       notificarMudanca();
       res.json({
-        mensagem: 'Comprovante anexado ✓',
-        sub: comp.analise ? `Leitura automática: ${comp.analise.observacao}` : 'Confira e aprove na ordem de serviço',
+        mensagem: comp.aprovadoPor === 'automatico' ? 'Comprovante aprovado automaticamente ✓' : 'Comprovante anexado ✓',
+        sub: comp.aprovadoPor === 'automatico' ? 'Tudo conferiu: a troca foi concluída e o cliente avisado' : comp.pendencias?.length ? `Não aprovado sozinho: ${comp.pendencias.join('; ')}` : comp.analise ? `Leitura automática: ${comp.analise.observacao}` : 'Confira e aprove na ordem de serviço',
         estado: banco.estado(),
       });
     } catch (e) {
@@ -344,6 +349,41 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
     const horas = Math.min(Number(req.query.horas) || 24, 24 * 31);
     const desde = new Date(Date.now() - horas * 3.6e6).toISOString();
     res.json(banco.trajeto(req.params.motoId, desde));
+  });
+
+  /** Período pedido (?de=&ate= em ISO). Sem informar = hoje (horário de Brasília, UTC-3). */
+  function periodoDaConsulta(q: Request['query']): { de: string; ate: string } {
+    const valido = (v: unknown) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : null);
+    const de = valido(q.de);
+    const ate = valido(q.ate);
+    if (de && ate) {
+      if (Date.parse(ate) - Date.parse(de) > 32 * 86_400_000) throw new ErroNegocio('Escolha um período de no máximo 31 dias.');
+      return { de, ate };
+    }
+    const BRT = 3 * 3.6e6;
+    const inicio = Math.floor((Date.now() - BRT) / 86_400_000) * 86_400_000 + BRT;
+    return { de: new Date(inicio).toISOString(), ate: new Date(inicio + 86_400_000 - 1).toISOString() };
+  }
+
+  // Viagens (liga/desliga) de uma moto + totais do período. Exige login (não é rota pública).
+  api.get('/gps/viagens/:motoId', (req, res) => {
+    try {
+      const { de, ate } = periodoDaConsulta(req.query);
+      res.json({ de, ate, ...viagensDaMoto(banco, req.params.motoId, de, ate) });
+    } catch (e) {
+      responderErro(res, e);
+    }
+  });
+
+  // Pontos do trajeto (um dia ou uma viagem), reduzidos a no máximo ?max= (padrão 600).
+  api.get('/gps/pontos/:motoId', (req, res) => {
+    try {
+      const { de, ate } = periodoDaConsulta(req.query);
+      const max = Math.min(Math.max(Number(req.query.max) || 600, 50), 2000);
+      res.json(banco.pontosDoPeriodo(req.params.motoId, de, ate, max));
+    } catch (e) {
+      responderErro(res, e);
+    }
   });
 
   api.get('/relatorios/km', (req, res) => {

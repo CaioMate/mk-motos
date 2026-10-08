@@ -3,6 +3,7 @@ import type {
   CampanhaMarketing,
   Cliente,
   ConfigSistema,
+  Comprovante,
   Contrato,
   FormaPagamento,
   Lead,
@@ -83,6 +84,50 @@ function validarCpf(b: Banco, cpf: string, ignorarId?: string) {
 const CAMPOS_CLIENTE = [
   'nome', 'cpf', 'cnh', 'telefone', 'email', 'endereco', 'cidade', 'origemLead', 'campanhaOrigem', 'observacoes',
 ] as const;
+
+/**
+ * Aprova um comprovante: conclui a troca, zera o contador da peça e avisa o cliente pelo WhatsApp.
+ * Usada pela ação do dono (`aprovarComprovante`) e pela aprovação automática (server/atendimento.ts).
+ * Deve rodar dentro de `banco.transacao()`.
+ */
+export function aprovarComprovanteDaOrdem(
+  b: Banco,
+  item: ManutencaoItem,
+  comp: Comprovante,
+  por: 'automatico' | 'dono',
+  custoInformado?: unknown
+): ResultadoAcao {
+  comp.status = 'aprovado';
+  comp.aprovadoPor = por;
+  if (por === 'automatico') comp.pendencias = [];
+  b.salvar('manutencoes', item);
+  const custo = custoInformado ?? comp.analise?.valorTotal ?? 0;
+  const r = ACOES.concluirManutencao(b, {
+    manutencaoId: item.id,
+    custo,
+    oficina: comp.analise?.estabelecimento || item.oficina,
+    observacao: `${item.observacao} Comprovante aprovado${por === 'automatico' ? ' automaticamente' : ''} em ${hojeBR()}.`,
+  });
+  const moto = b.lista<Moto>('motos').find((m) => m.id === item.motoId);
+  const cli = b.lista<Cliente>('clientes').find((c) => c.id === moto?.clienteAtualId);
+  if (cli) {
+    enfileirar(b, {
+      telefone: cli.telefone,
+      clienteId: cli.id,
+      motivo: 'comprovante',
+      texto: `Comprovante de ${item.tipo.toLowerCase()} aprovado. Obrigado por manter a moto ${moto?.placa ?? ''} em dia`,
+    });
+  }
+  if (por === 'automatico') {
+    registrarAtividade(b, {
+      titulo: 'Comprovante aprovado automaticamente',
+      subtitulo: `${item.tipo} • ${moto?.modelo ?? 'moto'} (${moto?.placa ?? ''})${cli ? ` • ${cli.nome}` : ''}`,
+      tipo: 'manutencao',
+      referenciaId: item.motoId,
+    });
+  }
+  return { ...r, mensagem: 'Comprovante aprovado e troca concluída ✓' };
+}
 
 export const ACOES: Record<string, Acao> = {
   // ------------------------------------------------------------- FROTA
@@ -546,26 +591,7 @@ export const ACOES: Record<string, Acao> = {
     const item = obter<ManutencaoItem>(b, 'manutencoes', p.manutencaoId, 'Manutenção');
     const comp = (item.comprovantes ?? []).find((c) => c.id === p.comprovanteId);
     exigir(comp, 'Comprovante não encontrado.');
-    comp!.status = 'aprovado';
-    b.salvar('manutencoes', item);
-    const custo = p.custo ?? comp!.analise?.valorTotal ?? 0;
-    const r = ACOES.concluirManutencao(b, {
-      manutencaoId: item.id,
-      custo,
-      oficina: comp!.analise?.estabelecimento || item.oficina,
-      observacao: `${item.observacao} Comprovante aprovado em ${hojeBR()}.`,
-    });
-    const moto = b.lista<Moto>('motos').find((m) => m.id === item.motoId);
-    const cli = b.lista<Cliente>('clientes').find((c) => c.id === moto?.clienteAtualId);
-    if (cli) {
-      enfileirar(b, {
-        telefone: cli.telefone,
-        clienteId: cli.id,
-        motivo: 'comprovante',
-        texto: `Comprovante de ${item.tipo.toLowerCase()} aprovado. Obrigado por manter a moto ${moto?.placa ?? ''} em dia`,
-      });
-    }
-    return { ...r, mensagem: 'Comprovante aprovado e troca concluída ✓' };
+    return aprovarComprovanteDaOrdem(b, item, comp!, 'dono', p.custo);
   },
 
   recusarComprovante(b, p) {
@@ -698,6 +724,8 @@ export const ACOES: Record<string, Acao> = {
   salvarConfig(b, p) {
     const nova = completarConfig({ ...b.config, ...(p.config ?? {}) } as ConfigSistema);
     exigir(nova.cobrancaKm.kmPorCiclo >= 100, 'O ciclo de cobrança deve ser de pelo menos 100 km.');
+    exigir(nova.retencaoMeses >= 1 && nova.retencaoMeses <= 120, 'O prazo para guardar dados antigos deve ficar entre 1 e 120 meses.');
+    exigir(nova.gps.velocidadeMovimentoKmh >= 1 && nova.gps.minutosParadaFimViagem >= 1, 'Velocidade de movimento e minutos parada devem ser pelo menos 1.');
     exigir(nova.planoPecas.every((pc) => pc.nome && pc.intervaloKm > 0), 'Cada peça do plano precisa de nome e intervalo de km.');
     exigir(nova.oficinas.every((o) => o.nome.trim()), 'Cada oficina precisa de um nome.');
     exigir(

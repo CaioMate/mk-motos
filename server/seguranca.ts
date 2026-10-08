@@ -8,7 +8,7 @@ import { conexaoSegura, exigeLogin, iguais } from './login';
 // Fontes do Google (index.html) e busca de cidades (Nominatim, em Configurações). Estilos inline: motion/tailwind usam style="".
 export const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://nominatim.openstreetmap.org; " +
+  "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org; " +
   "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 export const PERMISSIONS_POLICY = 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()';
 

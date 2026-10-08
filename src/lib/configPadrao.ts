@@ -50,7 +50,10 @@ export const CONFIG_PADRAO: ConfigSistema = {
   gps: {
     velocidadeMaxKmh: 160,
     distanciaMinimaM: 25,
+    velocidadeMovimentoKmh: 5,
+    minutosParadaFimViagem: 5,
   },
+  retencaoMeses: 24,
 };
 
 /** Garante que configs antigas salvas no banco recebam campos novos. */
@@ -76,6 +79,7 @@ export function completarConfig(parcial: Partial<ConfigSistema> | undefined): Co
     manutencao: { ...CONFIG_PADRAO.manutencao, ...(p.manutencao || {}) },
     whatsapp: { ...CONFIG_PADRAO.whatsapp, ...(p.whatsapp || {}) },
     gps: { ...CONFIG_PADRAO.gps, ...(p.gps || {}) },
+    retencaoMeses: Number.isFinite(p.retencaoMeses) && p.retencaoMeses! >= 1 ? Math.floor(p.retencaoMeses!) : CONFIG_PADRAO.retencaoMeses,
     planoPecas,
     oficinas,
     oficinaPadraoId: oficinas.some((o) => o.id === p.oficinaPadraoId) ? p.oficinaPadraoId! : oficinas[0].id,

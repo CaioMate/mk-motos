@@ -447,6 +447,13 @@ export const ConfiguracoesView: React.FC = () => {
                   <span className="font-semibold text-slate-800">{rotulo}</span>
                 </label>
               ))}
+              <label
+                data-dica="Quando o cliente manda o comprovante da troca, o sistema confere sozinho: oficina, data, km e se a foto já foi usada. Se tudo estiver certo, aprova e avisa o cliente; se algo não bater, ele fica na Manutenção para você decidir, com o motivo escrito."
+                className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer"
+              >
+                <input type="checkbox" checked={rascunho.manutencao.aprovacaoAutomatica} onChange={(e) => setRascunho({ ...rascunho, manutencao: { ...rascunho.manutencao, aprovacaoAutomatica: e.target.checked } })} className="h-4 w-4 accent-[#E50914]" />
+                <span className="font-semibold text-slate-800">Aprovar comprovantes de troca sozinho quando tudo conferir (precisa da IA ligada; desligado: você aprova um a um)</span>
+              </label>
               {botaoSalvar}
             </div>
 
@@ -585,6 +592,14 @@ Corpo: Olá {{1}}! Aviso da {{2}}: {{3}}. Responda esta mensagem se tiver dúvid
                   <label className="block font-semibold text-slate-700 mb-1">Descartar saltos acima de (km/h)</label>
                   <input type="number" min={50} value={rascunho.gps.velocidadeMaxKmh} onChange={(e) => setRascunho({ ...rascunho, gps: { ...rascunho.gps, velocidadeMaxKmh: Number(e.target.value) } })} className={`${inputCls} font-mono-tabular`} />
                 </div>
+                <div data-dica="Só vale para rastreador sem ignição (app de celular). Acima dessa velocidade o sistema entende que a moto está andando e começa uma viagem.">
+                  <label className="block font-semibold text-slate-700 mb-1">Moto andando a partir de (km/h)</label>
+                  <input type="number" min={1} value={rascunho.gps.velocidadeMovimentoKmh} onChange={(e) => setRascunho({ ...rascunho, gps: { ...rascunho.gps, velocidadeMovimentoKmh: Number(e.target.value) } })} className={`${inputCls} font-mono-tabular`} />
+                </div>
+                <div data-dica="Só vale para rastreador sem ignição. Se a moto ficar parada por esse tempo, a viagem é encerrada.">
+                  <label className="block font-semibold text-slate-700 mb-1">Viagem termina após parada de (minutos)</label>
+                  <input type="number" min={1} value={rascunho.gps.minutosParadaFimViagem} onChange={(e) => setRascunho({ ...rascunho, gps: { ...rascunho.gps, minutosParadaFimViagem: Number(e.target.value) } })} className={`${inputCls} font-mono-tabular`} />
+                </div>
               </div>
               {botaoSalvar}
             </div>
@@ -612,6 +627,15 @@ Corpo: Olá {{1}}! Aviso da {{2}}: {{3}}. Responda esta mensagem se tiver dúvid
             <p className="text-slate-500">
               O aviso de vencimento também define com quantos dias de antecedência a próxima mensalidade é gerada.
             </p>
+            <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3" data-dica="Por lei (LGPD) não se deve guardar dados pessoais para sempre. Passado este prazo, o sistema apaga sozinho, uma vez por dia.">
+              <label className="block font-semibold text-slate-700">Guardar dados antigos por quantos meses?</label>
+              <input type="number" min={1} max={120} value={rascunho.retencaoMeses} onChange={(e) => setRascunho({ ...rascunho, retencaoMeses: Number(e.target.value) })} className={`${inputCls} font-mono-tabular max-w-[8rem]`} />
+              <p className="text-slate-500">
+                Padrão: 24 meses (2 anos). Depois disso o sistema apaga sozinho: posições e viagens do GPS, mensagens do WhatsApp, o histórico de atividades e os
+                clientes cujo último contrato terminou há mais tempo que isso e que não devem nada (junto com os contratos, pagamentos e arquivos deles).
+                As motos nunca são apagadas. Quando apagar algo, aparece uma linha no histórico.
+              </p>
+            </div>
             {botaoSalvar}
           </div>
         )}
