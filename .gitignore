@@ -16,3 +16,4 @@ data/
 
 # Pacote gerado para a Vercel
 .vercel
+.claude/worktrees/
