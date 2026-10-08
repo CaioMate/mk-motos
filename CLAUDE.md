@@ -4,8 +4,7 @@ Sistema de locação de motos (React 19 + Vite 8 + Tailwind 4 no front; Express 
 Originalmente gerado no Google AI Studio como protótipo só de front-end; agora tem servidor e banco reais.
 O dono da locadora não é programador: fale com ele em português simples, com passo a passo.
 
-Equipe de agentes (repo `CaioMate/equipe-agentes`, cópia em `.claude/` para a web): delegue PRIMEIRO aos de
-nível 1 (`rapido-*`, `explorador`, `testador`), depois aos especialistas; tabela completa em `.claude/EQUIPE.md`.
+A equipe de agentes é global (repo `CaioMate/equipe-agentes`, instalada em `~/.claude`); aqui ficam só as notas deste projeto.
 
 ## Notas para os agentes
 - dev-backend: nova operação = função em `ACOES` (`server/acoes.ts`), `(b, p) => ResultadoAcao`; valide com
