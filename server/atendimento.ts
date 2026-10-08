@@ -1,6 +1,4 @@
 // Recebe as mensagens do WhatsApp (webhook da Meta), guarda comprovantes e responde com o agente.
-import fs from 'node:fs';
-import path from 'node:path';
 import type {
   Cliente,
   Comprovante,
@@ -48,7 +46,7 @@ export async function registrarComprovante(
   if (!ext) throw new Error('Envie o comprovante como foto (JPG/PNG) ou PDF.');
   const id = novoId('comp');
   const arquivo = `${id}.${ext}`;
-  fs.writeFileSync(path.join(b.pastaComprovantes, arquivo), dados);
+  b.salvarArquivo('comprovantes', arquivo, dados); // grava no disco e envia ao Supabase Storage
 
   const moto = b.lista<Moto>('motos').find((m) => m.id === item.motoId);
   const peca = b.config.planoPecas.find((p) => p.id === item.pecaId);
@@ -198,7 +196,7 @@ async function processarMensagem(b: Banco, msg: MensagemMeta) {
       const ext = EXTENSOES[mime];
       if (ext) {
         const arquivo = `${novoId('wa')}.${ext}`;
-        fs.writeFileSync(path.join(b.pastaComprovantes, arquivo), dados);
+        b.salvarArquivo('comprovantes', arquivo, dados);
         b.transacao(() => b.salvar('mensagens', { ...registro, arquivo }));
       }
       if (!ordem) {

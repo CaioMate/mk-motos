@@ -38,6 +38,7 @@ export const ConfiguracoesView: React.FC = () => {
   const [rascunho, setRascunho] = useState<ConfigSistema>(config);
   const [salvando, setSalvando] = useState(false);
   const [rede, setRede] = useState<string[]>([]);
+  const [tokenGps, setTokenGps] = useState<string | null>(null);
   const [desconhecidos, setDesconhecidos] = useState<Array<{ id: string; ultimaVez: string }>>([]);
   const [teste, setTeste] = useState({ imei: '', lat: -23.5505, lon: -46.6333, odometro: '' });
   const [buscaCidade, setBuscaCidade] = useState('');
@@ -71,6 +72,7 @@ export const ConfiguracoesView: React.FC = () => {
   useEffect(() => {
     if (section !== 'gps') return;
     fetch('/api/rede').then((r) => r.json()).then((r) => setRede(r.enderecos)).catch(() => {});
+    fetch('/api/gps/token').then((r) => r.json()).then((r) => setTokenGps(r.token ?? null)).catch(() => {});
     const carregar = () =>
       fetch('/api/gps/desconhecidos').then((r) => r.json()).then(setDesconhecidos).catch(() => {});
     carregar();
@@ -99,7 +101,7 @@ export const ConfiguracoesView: React.FC = () => {
     if (teste.odometro) corpo.odometroKm = Number(teste.odometro);
     const r = await fetch('/api/gps', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(tokenGps ? { 'X-GPS-Token': tokenGps } : {}) },
       body: JSON.stringify(corpo),
     });
     const j = await r.json();
@@ -119,6 +121,8 @@ export const ConfiguracoesView: React.FC = () => {
   ];
 
   const urlBase = rede[0] ?? window.location.origin;
+  const sufixoToken = tokenGps ? `?token=${tokenGps}` : '';
+  const urlGps = `${urlBase}/api/gps${sufixoToken}`;
   const botaoSalvar = (
     <button
       onClick={salvar}
@@ -497,11 +501,12 @@ Corpo: Olá {{1}}! Aviso da {{2}}: {{3}}. Responda esta mensagem se tiver dúvid
                 O sistema recebe as posições pelo endereço abaixo, soma os km rodados de cada moto e dispara as cobranças e trocas de peças.
               </p>
               <div className="flex items-center gap-2 rounded-xl bg-[#0B0B0B] p-3 font-mono-tabular text-white">
-                <span className="flex-1 break-all">{urlBase}/api/gps</span>
-                <button onClick={() => copiar(`${urlBase}/api/gps`)} className="rounded-md bg-white/10 p-1.5 hover:bg-white/20" title="Copiar">
+                <span className="flex-1 break-all">{urlGps}</span>
+                <button onClick={() => copiar(urlGps)} className="rounded-md bg-white/10 p-1.5 hover:bg-white/20" title="Copiar">
                   <Copy className="h-3.5 w-3.5" />
                 </button>
               </div>
+              {tokenGps && <p className="text-slate-500">O endereço acima já leva a senha dos rastreadores (<code>?token=</code>). Não divulgue; sem ela o sistema recusa as posições.</p>}
               {rede.length > 1 && <p className="text-slate-500">Outros endereços deste computador: {rede.slice(1).join(' · ')}</p>}
             </div>
 
@@ -521,7 +526,7 @@ Corpo: Olá {{1}}! Aviso da {{2}}: {{3}}. Responda esta mensagem se tiver dúvid
                 No arquivo <code>traccar.xml</code> adicione:
                 <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-100 p-3 text-[11px]">{`<entry key='forward.enable'>true</entry>
 <entry key='forward.json'>true</entry>
-<entry key='forward.url'>${urlBase}/api/gps/traccar</entry>`}</pre>
+<entry key='forward.url'>${urlBase}/api/gps/traccar${sufixoToken}</entry>`}</pre>
               </li>
               <li>
                 <strong>Plataforma do fornecedor do rastreador:</strong> se ela tiver “webhook” ou “API de posições”, configure para enviar

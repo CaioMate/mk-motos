@@ -28,6 +28,7 @@ import {
   verificarPlanoDePecas,
 } from './automacao';
 import { enfileirar } from './whatsapp';
+import { limparChaves } from './seguranca';
 
 export interface ResultadoAcao {
   mensagem?: string;
@@ -748,12 +749,14 @@ function aplicarConclusao(b: Banco, moto: Moto, item: ManutencaoItem) {
   b.salvar('motos', moto);
 }
 
+export const existeAcao = (nome: string) => Object.prototype.hasOwnProperty.call(ACOES, nome);
+
 /** Executa uma ação dentro de uma transação e roda as automações em seguida. */
 export function executarAcao(b: Banco, nome: string, payload: unknown): ResultadoAcao {
+  if (!existeAcao(nome)) throw new ErroNegocio(`Ação desconhecida: ${nome}`);
   const acao = ACOES[nome];
-  if (!acao) throw new ErroNegocio(`Ação desconhecida: ${nome}`);
   return b.transacao(() => {
-    const r = acao(b, payload ?? {});
+    const r = acao(b, limparChaves(payload ?? {}));
     executarRotinas(b);
     return r;
   });

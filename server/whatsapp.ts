@@ -19,6 +19,7 @@ const env = () => ({
 });
 
 export const whatsappConfigurado = () => !!(env().token && env().phoneId);
+export const segredoWhatsappConfigurado = () => !!env().appSecret;
 export const tokenVerificacao = () => env().verifyToken;
 
 /** Número no formato internacional só com dígitos (55 + DDD + número). */
@@ -45,7 +46,7 @@ export function clientePorTelefone(b: Banco, telefone: string): Cliente | undefi
 /** Confere a assinatura X-Hub-Signature-256 enviada pela Meta. */
 export function assinaturaValida(corpoBruto: Buffer | undefined, assinatura: string | undefined): boolean {
   const segredo = env().appSecret;
-  if (!segredo) return true; // sem segredo configurado não há como validar (aviso no painel)
+  if (!segredo) return true; // só na rede local sem senha: quem chama (app.ts) recusa quando há login ou Vercel
   if (!corpoBruto || !assinatura?.startsWith('sha256=')) return false;
   const esperado = crypto.createHmac('sha256', segredo).update(corpoBruto).digest('hex');
   const recebido = assinatura.slice(7);

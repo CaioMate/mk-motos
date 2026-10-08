@@ -38,6 +38,9 @@ export const CONFIG_PADRAO: ConfigSistema = {
     ativo: false,
     cidades: [],
   },
+  manutencao: {
+    aprovacaoAutomatica: true,
+  },
   whatsapp: {
     numeroDono: '',
     agenteResponde: true,
@@ -70,6 +73,7 @@ export function completarConfig(parcial: Partial<ConfigSistema> | undefined): Co
     cobrancaKm: { ...CONFIG_PADRAO.cobrancaKm, ...(p.cobrancaKm || {}) },
     trocas: { ...CONFIG_PADRAO.trocas, ...(p.trocas || {}) },
     cercaVirtual: { ...CONFIG_PADRAO.cercaVirtual, ...(p.cercaVirtual || {}) },
+    manutencao: { ...CONFIG_PADRAO.manutencao, ...(p.manutencao || {}) },
     whatsapp: { ...CONFIG_PADRAO.whatsapp, ...(p.whatsapp || {}) },
     gps: { ...CONFIG_PADRAO.gps, ...(p.gps || {}) },
     planoPecas,

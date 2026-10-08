@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node --no-warnings=ExperimentalWarning --import tsx server/index.ts",
     "build": "vite build",
+    "build:vercel": "node scripts/build-vercel.mjs",
     "start": "vite build && node --no-warnings=ExperimentalWarning --import tsx server/index.ts --producao",
     "servidor": "node --no-warnings=ExperimentalWarning --import tsx server/index.ts --producao",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.0",
+    "@supabase/supabase-js": "^2.117.3",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "express": "^4.21.2",

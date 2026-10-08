@@ -13,3 +13,6 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Pacote gerado para a Vercel
+.vercel

@@ -22,10 +22,29 @@ A equipe de agentes é global (repo `CaioMate/equipe-agentes`, instalada em `~/.
 - testador: `npm run lint` → `npm run build` → `MKMOTOS_DB="$TEMP/mk-teste.db" PORT=8099 npm run dev` e
   `curl` em `/api/estado` e `POST /api/acoes/<nome>` (dado inválido → 400 `{ erro }`). Nunca `data/mkmotos.db`.
 - seguranca: login por senha única via `SENHA_PAINEL` (`server/login.ts`: cookie HttpOnly assinado com HMAC, 30 dias,
-  5 erros/IP = bloqueio de 15 min). Com ela, toda `/api/*` exige sessão, exceto webhook WhatsApp, GPS e login. Sem ela:
+  5 erros/IP = bloqueio de 15 min; mais de 30 erros/hora no total = bloqueio global de 15 min; IP só via `ipDoCliente()`, nunca X-Forwarded-For;
+  na Vercel a senha precisa de 10+ caracteres). `server/seguranca.ts`: cabeçalhos/CSP (sem CSP no `npm run dev`; a lista é repetida em
+  `scripts/build-vercel.mjs`), CSRF (POST/PUT/DELETE em /api só JSON + Origin do mesmo host, exceto gps/webhook/cron), token do GPS
+  (`GPS_TOKEN`, ou derivado do segredo; `?token=`/Bearer/`X-GPS-Token`; obrigatório com SENHA_PAINEL; placa não identifica mais o rastreador),
+  `limparChaves()` (anti prototype pollution nas ações) e conferência dos bytes iniciais dos uploads. Webhook WhatsApp sem `WHATSAPP_APP_SECRET`
+  é recusado (503) com SENHA_PAINEL ou na Vercel.
+  AVISO: sem SENHA_PAINEL o "só rede local" depende de cabeçalhos de proxy e não é segurança forte; nunca exponha à internet sem senha. Com ela, toda `/api/*` exige sessão, exceto webhook WhatsApp, GPS e login. Sem ela:
   só rede local (internet = 403). `/api/backup` entrega o banco inteiro; uploads em `/api/manutencoes/:id/comprovante`.
 - devops: scripts `iniciar-mk-motos.bat`, `liberar-firewall.bat`, `tunel-whatsapp.bat`. Backup = copiar
   `data/mkmotos.db` com o servidor parado, ou `GET /api/backup`.
+- banco-dados/devops (Supabase): com `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` o Supabase é o armazenamento permanente;
+  o SQLite local vira cache. `Banco` (server/banco.ts) enfileira docs/arquivos alterados em `transacao()` e só envia após o COMMIT (fila com retry,
+  `server/nuvem.ts`); na inicialização baixa tudo (ou encerra se não responder). Esquema em `supabase/esquema.sql`, bucket privado `arquivos`.
+  Fotos/comprovantes: gravar com `banco.salvarArquivo()`, servir com `banco.garantirArquivo()`. GPS (`gps_posicoes`) NÃO vai ao Supabase.
+- devops (VERCEL, plano grátis): `vercel.json` roda `npm run build:vercel` (`scripts/build-vercel.mjs`) que gera `.vercel/output` (Build Output API v3):
+  `static/` (front), `functions/api.func/index.mjs` (`server/vercel.ts` empacotado com esbuild, nodejs22.x) e `config.json` (/api/* -> função; resto SPA).
+  Rotas em `server/app.ts` (`criarApp({modo})`); `server/index.ts` é só o modo local (listen + setInterval). Na Vercel: SQLite em /tmp baixado do
+  Supabase; marcador `meta/revisao` (Supabase) conferido a cada /api (`Banco.conferirRevisao`) e atualizado a cada envio; toda escrita
+  AGUARDA a fila no Supabase (`concluirGravacao`/`Banco.garantirEnvio`) e, se falhar, desfaz e responde 503; sem setInterval (rotinas em /api/estado se >15 min
+  e em `GET /api/cron` com `Bearer CRON_SECRET`); sem SSE (`/api/sessao` informa `tempoReal:false` e o front consulta a cada 20 s); tentativas de login no Supabase;
+  uploads até 3 MB (limite de 4,5 MB da Vercel). Obrigatórias: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SENHA_PAINEL, SESSAO_SEGREDO (faltando = 503 claro).
+  Limitações: GPS (trajeto/relatório de km) fica no /tmp de cada instância; envios simultâneos de duas instâncias podem se sobrepor (último grava); um WhatsApp
+  pendente pode sair em dobro se ação e cron coincidirem. Para testar: gere o pacote e importe `index.mjs` num `http.createServer` com um Supabase falso.
 - publicar: o dono autorizou commit + push sem perguntar.
 
 ## Comandos
@@ -41,7 +60,7 @@ A equipe de agentes é global (repo `CaioMate/equipe-agentes`, instalada em `~/.
   Toda ação roda em `banco.transacao()`; em erro, faz ROLLBACK e recarrega a memória.
 - Depois de toda ação/posição GPS roda `executarRotinas()` (mensalidades, atrasos, status derivados).
   Também roda a cada 15 min. Status de cliente/moto/aluguel/pagamento são **derivados** — não setar à mão.
-- Tempo real: `GET /api/eventos` (SSE) avisa `atualizado`; o front recarrega `/api/estado`.
+- Tempo real: `GET /api/eventos` (SSE) avisa `atualizado`; o front recarrega `/api/estado` (na Vercel não há SSE: consulta a cada 20 s).
 - GPS: `server/gps.ts` normaliza OsmAnd, Traccar Client 9+, Traccar Server forward e JSON simples.
   Distância por hodômetro quando existe, senão Haversine com filtro de ruído/saltos (`config.gps`).
 - Km → `processarKm()` soma na moto e no contrato, cobra ciclos (`config.cobrancaKm`) e abre trocas do

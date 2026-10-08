@@ -84,6 +84,12 @@ export interface Comprovante {
   status: 'pendente' | 'aprovado' | 'recusado';
   motivoRecusa?: string;
   analise?: AnaliseComprovante;
+  /** SHA-256 do arquivo: o mesmo comprovante não pode ser usado em duas ordens */
+  hash?: string;
+  /** Motivos pelos quais não foi aprovado sozinho (texto simples, para o dono) */
+  pendencias?: string[];
+  /** Quem aprovou: o sistema (conferência automática) ou o dono */
+  aprovadoPor?: 'automatico' | 'dono';
 }
 
 export interface Oficina {
@@ -270,6 +276,10 @@ export interface ConfigSistema {
   cercaVirtual: {
     ativo: boolean;
     cidades: CidadePermitida[];
+  };
+  manutencao: {
+    /** Comprovante que passa em todas as conferências é aprovado sem o dono */
+    aprovacaoAutomatica: boolean;
   };
   whatsapp: {
     /** WhatsApp do dono para receber alertas (com DDD) */

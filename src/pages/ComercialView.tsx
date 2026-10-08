@@ -33,6 +33,7 @@ export const ComercialView: React.FC = () => {
   const {
     leads,
     campanhas,
+    motos,
     addLead,
     moveLeadStage,
     converterLeadEmCliente,
@@ -43,7 +44,7 @@ export const ComercialView: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
-  const [motoInteresse, setMotoInteresse] = useState('Honda CG 160');
+  const [motoInteresse, setMotoInteresse] = useState('');
   const [origem, setOrigem] = useState<LeadOrigin>('Instagram');
   const [campanha, setCampanha] = useState('');
   const [notas, setNotas] = useState('');
@@ -402,11 +403,10 @@ export const ComercialView: React.FC = () => {
                     onChange={(e) => setMotoInteresse(e.target.value)}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900"
                   >
-                    <option value="Honda CG 160">Honda CG 160</option>
-                    <option value="Honda Biz 125">Honda Biz 125</option>
-                    <option value="Yamaha Factor 150">Yamaha Factor 150</option>
-                    <option value="Honda NXR 160 Bros">Honda NXR 160 Bros</option>
-                    <option value="Yamaha Fazer FZ25">Yamaha Fazer FZ25</option>
+                    <option value="">Qualquer moto</option>
+                    {Array.from(new Set(motos.map(m => m.modelo))).map(modelo => (
+                      <option key={modelo} value={modelo}>{modelo}</option>
+                    ))}
                   </select>
                 </div>
 

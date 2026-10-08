@@ -51,7 +51,9 @@ function verificarCercaVirtual(b: Banco, moto: Moto, pos: PosicaoGps) {
  *
  * 1. JSON simples (qualquer integração própria):
  *    { "imei": "123456789012345", "lat": -23.5, "lon": -46.6, "velocidadeKmh": 40, "odometroKm": 1520.4 }
- *    (pode usar "motoId" ou "placa" no lugar de "imei")
+ *    (pode usar "motoId" no lugar de "imei"; a placa NÃO é aceita como identificação)
+ *
+ * Todos os formatos exigem o token do GPS (?token=..., Authorization: Bearer ou X-GPS-Token) — ver server/seguranca.ts.
  *
  * 2. Protocolo OsmAnd (app "Traccar Client" no celular, versões antigas, e vários rastreadores):
  *    GET/POST /api/gps?id=IMEI&lat=-23.5&lon=-46.6&speed=20&timestamp=1700000000
@@ -119,10 +121,10 @@ export function normalizarLeitura(corpo: Record<string, any>, query: Record<stri
       odometroKm: num(loc.odometer) !== undefined ? num(loc.odometer)! / 1000 : undefined,
       dataHora: dataDe(loc.timestamp),
     };
-  } else if (q.velocidadeKmh !== undefined || q.imei || q.motoId || q.placa) {
+  } else if (q.velocidadeKmh !== undefined || q.imei || q.motoId) {
     // JSON simples
     r = {
-      identificador: String(q.imei ?? q.motoId ?? q.placa ?? q.id ?? ''),
+      identificador: String(q.imei ?? q.motoId ?? q.id ?? ''),
       lat: num(q.lat ?? q.latitude),
       lon: num(q.lon ?? q.lng ?? q.longitude),
       velocidadeKmh: num(q.velocidadeKmh),
@@ -170,8 +172,7 @@ export function encontrarMoto(b: Banco, identificador: string): Moto | undefined
     .find(
       (m) =>
         (m.gpsImei && m.gpsImei.trim().toUpperCase() === id) ||
-        m.id.toUpperCase() === id ||
-        m.placa.toUpperCase() === id
+        m.id.toUpperCase() === id
     );
 }
 

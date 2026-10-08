@@ -20,6 +20,7 @@ import {
 import { calcularAlertas } from '../lib/indicadores';
 import { EVENTO_SESSAO_EXPIRADA } from './SessaoContext';
 import { reduzirImagem } from '../lib/imagem';
+import { infoServidor } from '../lib/servidorInfo';
 
 export interface ToastMessage {
   id: string;
@@ -161,6 +162,7 @@ async function chamarApi(nome: string, payload: unknown) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {}),
   });
+  if (r.status === 413) throw new Error(`Arquivo grande demais para enviar (máximo ${infoServidor.limiteUploadMb} MB). Escolha uma foto menor.`);
   const json = await r.json().catch(() => ({ erro: 'Resposta inválida do servidor.' }));
   if (r.status === 401) window.dispatchEvent(new Event(EVENTO_SESSAO_EXPIRADA));
   if (!r.ok) throw new Error(json.erro || `Erro ${r.status}`);
@@ -209,16 +211,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     carregar();
-    // Atualização em tempo real: o servidor avisa quando algo muda (GPS, outra pessoa, rotinas)
-    const fonte = new EventSource('/api/eventos');
-    fonte.addEventListener('atualizado', () => carregarRef.current());
-    fonte.addEventListener('conectado', () => carregarRef.current());
-    fonte.onerror = () => setConexao('offline');
-    // Reserva: se o canal em tempo real cair, consulta a cada 30 s
-    const intervalo = setInterval(() => carregarRef.current(), 30_000);
+    let fonte: EventSource | undefined;
+    let semTempoReal = !infoServidor.tempoReal; // Vercel: sem SSE, só consulta periódica
+    let falhas = 0;
+    const abrirFonte = () => {
+      // Atualização em tempo real: o servidor avisa quando algo muda (GPS, outra pessoa, rotinas)
+      fonte = new EventSource('/api/eventos');
+      fonte.addEventListener('atualizado', () => carregarRef.current());
+      fonte.addEventListener('conectado', () => {
+        falhas = 0;
+        carregarRef.current();
+      });
+      fonte.onerror = () => {
+        setConexao('offline');
+        if (++falhas >= 3) {
+          // o canal não se sustenta (proxy/hospedagem sem SSE): desiste e passa a consultar a cada 20 s
+          fonte?.close();
+          semTempoReal = true;
+        }
+      };
+    };
+    if (!semTempoReal) abrirFonte();
+    // Consulta periódica: reserva do tempo real (30 s) ou o único meio (20 s, só com a aba visível)
+    const intervalo = setInterval(() => {
+      if (semTempoReal && document.visibilityState !== 'visible') return;
+      carregarRef.current();
+    }, 20_000);
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible' && semTempoReal) carregarRef.current();
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
     return () => {
-      fonte.close();
+      fonte?.close();
       clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', aoVoltar);
     };
   }, [carregar]);
 
@@ -368,6 +394,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recusarComprovante: (manutencaoId, comprovanteId, motivo) =>
           executar('recusarComprovante', { manutencaoId, comprovanteId, motivo }),
         anexarComprovante: async (manutencaoId, arquivo) => {
+          if (arquivo.size > infoServidor.limiteUploadMb * 1024 * 1024) {
+            showToast('Arquivo grande demais', `O limite é ${infoServidor.limiteUploadMb} MB. Tire uma foto menor ou reduza o PDF e tente de novo.`, true);
+            return false;
+          }
           const base64 = await new Promise<string>((ok, falha) => {
             const leitor = new FileReader();
             leitor.onload = () => ok(String(leitor.result).split(',')[1] ?? '');
