@@ -42,10 +42,14 @@ type Acao = (b: Banco, p: any) => ResultadoAcao;
 const exigir = (cond: unknown, msg: string): void => {
   if (!cond) throw new ErroNegocio(msg);
 };
-const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim());
-const numero = (v: unknown, campo: string, min = 0) => {
+const texto = (v: unknown) => {
+  const s = (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim());
+  exigir(s.length <= 5000, 'Texto muito longo.');
+  return s;
+};
+const numero = (v: unknown, campo: string, min = 0, max = 1e9) => {
   const n = Number(v);
-  exigir(Number.isFinite(n) && n >= min, `${campo}: informe um número válido${min > 0 ? ` (mínimo ${min})` : ''}.`);
+  exigir(Number.isFinite(n) && n >= min && n <= max, `${campo}: informe um número válido${min > 0 ? ` (mínimo ${min})` : ''}${n > max ? ` (máximo ${max.toLocaleString('pt-BR')})` : ''}.`);
   return n;
 };
 

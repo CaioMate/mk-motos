@@ -30,11 +30,26 @@ await esbuild({
   target: 'node22',
   legalComments: 'none',
   logLevel: 'info',
+  // tesseract.js (OCR de comprovantes) abre um worker por caminho de arquivo: não dá para embutir; vai em node_modules ao lado
+  external: ['tesseract.js'],
   // pacotes CommonJS (express etc.) dentro de um módulo ESM precisam de "require"
   banner: {
     js: "import { createRequire as __criarRequire } from 'node:module'; const require = __criarRequire(import.meta.url);",
   },
 });
+
+// 3b) tesseract.js e suas dependências (recursivo) copiados para functions/api.func/node_modules
+const copiados = new Set();
+function copiarPacote(nome, deQuem = raiz) {
+  if (copiados.has(nome)) return;
+  const origem = [path.join(deQuem, 'node_modules', nome), path.join(raiz, 'node_modules', nome)].find((p) => fs.existsSync(p));
+  if (!origem) return;
+  copiados.add(nome);
+  fs.cpSync(origem, path.join(funcao, 'node_modules', nome), { recursive: true });
+  const pkg = JSON.parse(fs.readFileSync(path.join(origem, 'package.json'), 'utf8'));
+  for (const dep of Object.keys(pkg.dependencies ?? {})) copiarPacote(dep, origem);
+}
+copiarPacote('tesseract.js');
 
 fs.writeFileSync(
   path.join(funcao, '.vc-config.json'),

@@ -34,8 +34,22 @@ export function nomesDeOficinaCorrespondem(a: string, b: string): boolean {
   if (ta.length >= 3 && tb.length >= 3 && (ta.includes(tb) || tb.includes(ta))) return true;
   const sa = new Set(pa);
   const sb = new Set(pb);
-  const iguais = [...sa].filter((w) => sb.has(w)).length;
+  // palavra igual, ou com 1 letra errada quando tem 5+ letras (erro típico de leitura de texto em foto)
+  const parecida = (w: string, outras: Set<string>) =>
+    outras.has(w) || (w.length >= 5 && [...outras].some((o) => o.length >= 5 && Math.abs(o.length - w.length) <= 1 && umaLetraDiferente(w, o)));
+  const iguais = [...sa].filter((w) => parecida(w, sb)).length;
   return iguais * 2 > Math.min(sa.size, sb.size);
+}
+
+/** Distância de edição <= 1 (troca, falta ou sobra de uma letra). */
+function umaLetraDiferente(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length < b.length) [a, b] = [b, a];
+  if (a.length - b.length > 1) return false;
+  let i = 0;
+  while (i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1);
+  return a.slice(i + 1) === b.slice(i);
 }
 
 const semAcento = (t: string) =>
@@ -53,6 +67,10 @@ const CATEGORIAS_SERVICO: Record<string, RegExp> = {
 
 const categoriasDe = (textos: string[]) =>
   new Set(Object.entries(CATEGORIAS_SERVICO).filter(([, re]) => textos.some((t) => re.test(semAcento(t)))).map(([k]) => k));
+
+/** Linhas de um texto que citam algum serviço/peça conhecido (usado pela leitura por OCR). */
+export const linhasDeServico = (linhas: string[]): string[] =>
+  linhas.filter((l) => Object.values(CATEGORIAS_SERVICO).some((re) => re.test(semAcento(l))));
 
 /** O serviço listado no comprovante é o pedido na ordem? (tolerante: sinônimos simples) */
 export function servicoConfere(servicosComprovante: string[], servicoEsperado: string[]): boolean {

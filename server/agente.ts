@@ -1,16 +1,33 @@
-// Agente de atendimento com IA (Claude): lê comprovantes e responde clientes no WhatsApp.
-// Precisa de ANTHROPIC_API_KEY no arquivo .env. Sem a chave, o sistema funciona com respostas fixas.
+// Agente de atendimento com IA: lê comprovantes e responde clientes no WhatsApp.
+// Provedores em cascata (o primeiro que funcionar vence; falha/cota estourada passa para o próximo):
+//   1. Claude (ANTHROPIC_API_KEY, pago)  2. Gemini (GEMINI_API_KEY, plano grátis)  3. OCR local (grátis, só fotos; server/ocr.ts)
+// Sem nenhum, o sistema funciona com respostas fixas e os comprovantes vão para o dono conferir.
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import type { AnaliseComprovante } from '../src/types/mkMotos';
+import { analisarPorOcr, ocrDisponivel } from './ocr';
 
 const MODELO = 'claude-opus-5-5';
+/** Modelo Flash com cota gratuita (ai.google.dev/gemini-api/docs/pricing). Pode ser trocado com GEMINI_MODEL no .env. */
+const MODELO_GEMINI = () => process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
+const TEMPO_GEMINI_MS = 30_000;
 
-export const iaConfigurada = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+const temClaude = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+const temGemini = () => !!process.env.GEMINI_API_KEY?.trim();
+
+/** Existe IA de conversa (Claude ou Gemini) para responder clientes? */
+export const iaConfigurada = () => temClaude() || temGemini();
+
+/** Quem lê comprovantes agora (o primeiro da cascata que está disponível). */
+export const provedorDeLeitura = (): 'claude' | 'gemini' | 'ocr' | 'nenhum' =>
+  temClaude() ? 'claude' : temGemini() ? 'gemini' : ocrDisponivel() ? 'ocr' : 'nenhum';
 
 let cliente: Anthropic | null = null;
 const ia = () => (cliente ??= new Anthropic());
+let clienteGemini: GoogleGenAI | null = null;
+const gemini = () => (clienteGemini ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!.trim(), httpOptions: { timeout: TEMPO_GEMINI_MS } }));
 
 const ESQUEMA_COMPROVANTE = z.object({
   ehComprovante: z.boolean().describe('true se a imagem/arquivo é um comprovante, nota fiscal ou recibo de serviço'),
@@ -34,13 +51,67 @@ export interface ContextoComprovante {
 const TIPOS_IMAGEM = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 type TipoImagem = (typeof TIPOS_IMAGEM)[number];
 
-/** Lê o comprovante e extrai os dados para o dono conferir. Retorna null se a IA não estiver configurada. */
+const SISTEMA_COMPROVANTE =
+  'Você confere comprovantes de manutenção de motos para uma locadora. Extraia os dados do documento ' +
+  'com fidelidade, sem inventar informações que não estão visíveis. Escreva em português do Brasil.';
+
+const textoComprovante = (ctx: ContextoComprovante) =>
+  `Serviço que o cliente deveria ter feito: ${ctx.servicoEsperado}.\n` +
+  `Oficina credenciada indicada: ${ctx.oficinaNome} — ${ctx.oficinaEndereco}.\n` +
+  `Moto placa ${ctx.placa}, ${Math.round(ctx.kmMoto)} km pelo GPS.\n` +
+  'Extraia os dados deste comprovante e diga se confere com o serviço e a oficina.';
+
+const MIMES_GEMINI = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+
+/** Gemini (plano grátis): imagem ou PDF inline + saída JSON validada com o mesmo schema zod. */
+async function analisarComGemini(dados: Buffer, mime: string, ctx: ContextoComprovante): Promise<AnaliseComprovante | null> {
+  if (!MIMES_GEMINI.includes(mime)) return null;
+  const { $schema: _omitido, ...esquemaJson } = z.toJSONSchema(ESQUEMA_COMPROVANTE) as Record<string, unknown>;
+  const r = await gemini().models.generateContent({
+    model: MODELO_GEMINI(),
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: mime, data: dados.toString('base64') } }, { text: textoComprovante(ctx) }] }],
+    config: {
+      systemInstruction: SISTEMA_COMPROVANTE,
+      responseMimeType: 'application/json',
+      responseJsonSchema: esquemaJson,
+      temperature: 0,
+    },
+  });
+  if (!r.text) return null;
+  return { ...ESQUEMA_COMPROVANTE.parse(JSON.parse(r.text)), fonte: 'gemini' };
+}
+
+/**
+ * Lê o comprovante e extrai os dados para o dono conferir, usando Claude, depois Gemini, depois OCR local.
+ * Qualquer falha (cota 429, rede, resposta inválida) passa para o próximo. Retorna null se nenhum conseguiu.
+ */
 export async function analisarComprovante(
   dados: Buffer,
   mime: string,
   ctx: ContextoComprovante
 ): Promise<AnaliseComprovante | null> {
-  if (!iaConfigurada()) return null;
+  const etapas: Array<[string, boolean, () => Promise<AnaliseComprovante | null>]> = [
+    ['Claude', temClaude(), () => analisarComClaude(dados, mime, ctx)],
+    ['Gemini', temGemini(), () => analisarComGemini(dados, mime, ctx)],
+    ['OCR', ocrDisponivel(), () => analisarPorOcr(dados, mime, ctx)],
+  ];
+  for (const [nome, ativo, executar] of etapas) {
+    if (!ativo) continue;
+    try {
+      const analise = await executar();
+      if (analise) return analise;
+    } catch (e) {
+      console.warn(`[IA] ${nome} não conseguiu ler o comprovante, tentando o próximo:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return null;
+}
+
+async function analisarComClaude(
+  dados: Buffer,
+  mime: string,
+  ctx: ContextoComprovante
+): Promise<AnaliseComprovante | null> {
   const base64 = dados.toString('base64');
   const arquivo: Anthropic.ContentBlockParam =
     mime === 'application/pdf'
@@ -55,28 +126,11 @@ export async function analisarComprovante(
     model: MODELO,
     max_tokens: 16000,
     output_config: { effort: 'medium', format: zodOutputFormat(ESQUEMA_COMPROVANTE) },
-    system:
-      'Você confere comprovantes de manutenção de motos para uma locadora. Extraia os dados do documento ' +
-      'com fidelidade, sem inventar informações que não estão visíveis. Escreva em português do Brasil.',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          arquivo,
-          {
-            type: 'text',
-            text:
-              `Serviço que o cliente deveria ter feito: ${ctx.servicoEsperado}.\n` +
-              `Oficina credenciada indicada: ${ctx.oficinaNome} — ${ctx.oficinaEndereco}.\n` +
-              `Moto placa ${ctx.placa}, ${Math.round(ctx.kmMoto)} km pelo GPS.\n` +
-              'Extraia os dados deste comprovante e diga se confere com o serviço e a oficina.',
-          },
-        ],
-      },
-    ],
+    system: SISTEMA_COMPROVANTE,
+    messages: [{ role: 'user', content: [arquivo, { type: 'text', text: textoComprovante(ctx) }] }],
   });
-  if (resposta.stop_reason === 'refusal') return null;
-  return resposta.parsed_output ?? null;
+  if (resposta.stop_reason === 'refusal' || !resposta.parsed_output) return null;
+  return { ...resposta.parsed_output, fonte: 'claude' };
 }
 
 export interface ContextoAtendimento {
@@ -99,7 +153,6 @@ Como responder:
 
 /** Gera a resposta do agente para a última mensagem do cliente. Retorna null se a IA não estiver configurada. */
 export async function responderCliente(ctx: ContextoAtendimento): Promise<string | null> {
-  if (!iaConfigurada()) return null;
   const mensagens: Anthropic.Beta.BetaMessageParam[] = [];
   for (const h of ctx.historico) {
     const role = h.papel === 'cliente' ? 'user' : 'assistant';
@@ -108,6 +161,31 @@ export async function responderCliente(ctx: ContextoAtendimento): Promise<string
   }
   if (!mensagens.length || mensagens[mensagens.length - 1].role !== 'user') return null;
 
+  if (temClaude()) {
+    try {
+      const texto = await responderComClaude(ctx, mensagens);
+      if (texto) return texto;
+    } catch (e) {
+      if (!temGemini()) throw e;
+      console.warn('[IA] Claude falhou ao responder, tentando o Gemini:', e instanceof Error ? e.message : e);
+    }
+  }
+  if (temGemini()) {
+    const r = await gemini().models.generateContent({
+      model: MODELO_GEMINI(),
+      contents: mensagens.map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: String(m.content) }] })),
+      config: {
+        systemInstruction: `${INSTRUCOES_ATENDIMENTO(ctx.empresa)}\n\nFicha do cliente (dados do sistema):\n${ctx.ficha}`,
+        maxOutputTokens: 2000, // folga: modelos com "raciocínio" gastam parte disso antes de responder
+        temperature: 0.4,
+      },
+    });
+    return r.text?.trim() || null;
+  }
+  return null;
+}
+
+async function responderComClaude(ctx: ContextoAtendimento, mensagens: Anthropic.Beta.BetaMessageParam[]): Promise<string | null> {
   const resposta = await ia().beta.messages.create({
     model: MODELO,
     max_tokens: 2000,

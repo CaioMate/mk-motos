@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { Banco } from './banco';
 import { criarNuvem } from './nuvem';
 import { processarFila, whatsappConfigurado } from './whatsapp';
-import { iaConfigurada } from './agente';
+import { provedorDeLeitura } from './agente';
 import { exigeLogin } from './login';
 import { criarApp, enderecosLocais, prepararBanco } from './app';
 
@@ -86,7 +86,7 @@ servidor.listen(PORTA, '0.0.0.0', () => {
   console.log(`  Endereço do GPS:    http://<IP-acima>:${PORTA}/api/gps`);
   console.log(`  Banco de dados:     ${ARQUIVO_BANCO}`);
   console.log(`  WhatsApp (Meta):    ${whatsappConfigurado() ? 'configurado' : 'não configurado (veja Configurações > WhatsApp)'}`);
-  console.log(`  Agente de IA:       ${iaConfigurada() ? 'configurado' : 'não configurado (ANTHROPIC_API_KEY)'}`);
+  console.log(`  Agente de IA:       ${{ claude: 'Claude', gemini: 'Gemini (grátis)', ocr: 'só leitor de texto local (grátis; para IA completa: GEMINI_API_KEY)', nenhum: 'desligado' }[provedorDeLeitura()]}`);
   console.log(
     exigeLogin()
       ? '  Login do painel:    ativado (SENHA_PAINEL) - pode usar pela internet'

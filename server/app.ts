@@ -1,6 +1,6 @@
 // Cria o aplicativo Express (rotas da API). Quem abre a porta e roda os temporizadores é server/index.ts (modo local,
 // servidor longo); na Vercel quem chama é server/vercel.ts (uma função por requisição, sem temporizadores).
-import express, { type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import os from 'node:os';
 import path from 'node:path';
 import type { Banco } from './banco';
@@ -9,7 +9,7 @@ import { ErroNegocio, executarRotinas, migrarDados, registrarAtividade } from '.
 import { executarAcao, existeAcao } from './acoes';
 import { normalizarLeitura, rastreadoresDesconhecidos, registrarPosicao, viagensDaMoto } from './gps';
 import { assinaturaValida, filaPendente, segredoWhatsappConfigurado, processarFila, tokenVerificacao, whatsappConfigurado } from './whatsapp';
-import { iaConfigurada } from './agente';
+import { iaConfigurada, provedorDeLeitura } from './agente';
 import { processarWebhook, registrarComprovante } from './atendimento';
 import { definirModoVercel, exigeLogin, iguais, porteiro, rotasLogin, tentativasNaNuvem } from './login';
 import { cabecalhosSeguranca, conteudoCombinaComMime, exigirTokenGps, gpsToken, protecaoCsrf } from './seguranca';
@@ -38,6 +38,7 @@ export function prepararBanco(banco: Banco) {
   banco.statusIntegracoes = () => ({
     whatsappConfigurado: whatsappConfigurado(),
     iaConfigurada: iaConfigurada(),
+    iaProvedor: provedorDeLeitura(),
     filaPendente: filaPendente(banco),
   });
 }
@@ -404,6 +405,18 @@ export function criarApp({ banco, modo, porta, producao = true }: OpcoesApp) {
 
   api.use((_req, res) => res.status(404).json({ erro: 'Rota da API não encontrada.' }));
   app.use('/api', api);
+
+  // Middleware de erro para capturar SyntaxError do express.json e outros erros 4xx/5xx
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
+    console.error(err);
+    const status = (err.status || err.statusCode) ?? 500;
+    const mensagem =
+      status === 413 ? 'Arquivo ou dados grandes demais.' :
+      status >= 400 && status < 500 ? 'Requisição inválida.' :
+      'Erro interno no servidor.';
+    res.status(status >= 400 && status < 600 ? status : 500).json({ erro: mensagem });
+  });
 
   return { app, notificarMudanca, rodarRotinas };
 }

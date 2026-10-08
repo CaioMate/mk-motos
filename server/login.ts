@@ -31,7 +31,8 @@ const primeiro = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] 
 export function ipDoCliente(req: Request): string {
   const socket = req.socket?.remoteAddress;
   if (modoVercel) return primeiro(req.headers['x-vercel-forwarded-for']) || primeiro(req.headers['x-real-ip']) || socket || 'desconhecido';
-  if (ehLoopback(socket)) return primeiro(req.headers['cf-connecting-ip']) || socket || 'desconhecido';
+  const temTunel = process.env.TUNEL_CLOUDFLARE === '1';
+  if (ehLoopback(socket) && temTunel) return primeiro(req.headers['cf-connecting-ip']) || socket || 'desconhecido';
   return socket || 'desconhecido';
 }
 

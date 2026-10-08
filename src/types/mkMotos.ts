@@ -72,6 +72,8 @@ export interface AnaliseComprovante {
   /** O estabelecimento parece ser a oficina credenciada indicada */
   confereComOficina: boolean;
   observacao: string;
+  /** Quem leu o comprovante (comprovantes antigos não têm: foi o Claude) */
+  fonte?: 'claude' | 'gemini' | 'ocr';
 }
 
 export interface Comprovante {
@@ -333,6 +335,8 @@ export interface ConfigSistema {
 export interface StatusIntegracoes {
   whatsappConfigurado: boolean;
   iaConfigurada: boolean;
+  /** Quem lê comprovantes agora: Claude, Gemini (grátis), leitor de texto local (grátis, só fotos) ou ninguém */
+  iaProvedor?: 'claude' | 'gemini' | 'ocr' | 'nenhum';
   /** Mensagens pendentes de envio na fila */
   filaPendente: number;
 }

@@ -263,6 +263,9 @@ export const ManutencaoView: React.FC = () => {
                             {!comp.analise.ehComprovante ? '⚠ Não parece ser um comprovante. ' : !comp.analise.confereComOficina ? '⚠ Oficina diferente da credenciada. ' : '✓ Confere com a oficina. '}
                             {comp.analise.observacao}
                           </p>
+                          <p className="text-slate-400">
+                            Conferido por {comp.analise.fonte === 'ocr' ? 'leitor de texto (grátis, confira a imagem)' : comp.analise.fonte === 'gemini' ? 'Gemini (IA grátis do Google)' : 'Claude (IA)'}
+                          </p>
                         </div>
                       ) : (
                         <p className="text-slate-500">Sem leitura automática (configure a IA em Configurações → WhatsApp e agente). Abra a imagem para conferir.</p>
