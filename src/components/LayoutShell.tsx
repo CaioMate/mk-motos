@@ -244,7 +244,7 @@ export const LayoutShell: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL */}
       <div className="flex-1 flex flex-col lg:pl-64 min-w-0">
-        {/* TOP BAR (BUSCA GLOBAL + DEMONSTRAÇÃO + SINO DE NOTIFICAÇÕES) */}
+        {/* TOP BAR (BUSCA GLOBAL + SINO DE NOTIFICAÇÕES) */}
         <header className="sticky top-0 z-20 h-16 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between gap-4">
           {/* Left Zone: Mobile Menu + Global Search */}
           <div className="flex items-center gap-3 flex-1 max-w-xl" ref={searchRef}>

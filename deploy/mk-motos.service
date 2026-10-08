@@ -1,0 +1,30 @@
+# Serviço do MK Motos (systemd). Instalado pelo instalar.sh em /etc/systemd/system/.
+# Comandos úteis:  sudo systemctl status mk-motos   |   sudo systemctl restart mk-motos
+# O caminho do node é trocado automaticamente pelo instalar.sh se for diferente de /usr/bin/node.
+
+[Unit]
+Description=MK Motos (sistema de locação de motos)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mkmotos
+Group=mkmotos
+WorkingDirectory=/opt/mk-motos
+EnvironmentFile=/opt/mk-motos/.env
+ExecStart=/usr/bin/node --no-warnings=ExperimentalWarning --import tsx server/index.ts --producao
+Restart=always
+RestartSec=5
+
+# Endurecimento: o processo não ganha privilégios e só grava em data/.
+# O servidor grava apenas em data/ (banco, fotos, comprovantes). O OCR, o tsx e
+# arquivos temporários usam /tmp, que é privada por causa do PrivateTmp.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/mk-motos/data
+PrivateTmp=yes
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

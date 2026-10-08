@@ -6,7 +6,7 @@ import { Banco } from './banco';
 import { criarNuvem } from './nuvem';
 import { processarFila, whatsappConfigurado } from './whatsapp';
 import { provedorDeLeitura } from './agente';
-import { exigeLogin } from './login';
+import { SENHA_MINIMA_VERCEL as SENHA_MINIMA_PROXY, exigeLogin, proxyLocal, senhaPainel } from './login';
 import { criarApp, enderecosLocais, prepararBanco } from './app';
 
 const RAIZ = path.resolve(import.meta.dirname, '..');
@@ -15,6 +15,14 @@ if (fs.existsSync(path.join(RAIZ, '.env'))) process.loadEnvFile(path.join(RAIZ, 
 const PRODUCAO = process.argv.includes('--producao');
 const PORTA = Number(process.env.PORT) || 8000;
 const ARQUIVO_BANCO = process.env.MKMOTOS_DB || path.join(RAIZ, 'data', 'mkmotos.db');
+const HOST = process.env.HOST?.trim() || '0.0.0.0';
+const SO_LOCAL = ['127.0.0.1', '::1', 'localhost'].includes(HOST);
+
+// PROXY_LOCAL=1 = sistema exposto na internet por um proxy (Caddy): sem senha forte, não sobe em produção.
+if (PRODUCAO && proxyLocal() && senhaPainel().length < SENHA_MINIMA_PROXY) {
+  console.error(`\n  ERRO: PROXY_LOCAL=1 exige SENHA_PAINEL com pelo menos ${SENHA_MINIMA_PROXY} caracteres no .env.\n  O sistema NÃO foi iniciado para não ficar aberto na internet.\n`);
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------- banco
 const nuvem = criarNuvem();
@@ -78,12 +86,17 @@ if (PRODUCAO) {
   app.use(vite.middlewares);
 }
 
-servidor.listen(PORTA, '0.0.0.0', () => {
+servidor.listen(PORTA, HOST, () => {
   console.log('');
   console.log(`  MK MOTOS rodando (${PRODUCAO ? 'produção' : 'desenvolvimento'})`);
   console.log(`  Neste computador:   http://localhost:${PORTA}`);
-  for (const ip of enderecosLocais()) console.log(`  Na rede local:      http://${ip}:${PORTA}`);
-  console.log(`  Endereço do GPS:    http://<IP-acima>:${PORTA}/api/gps`);
+  if (SO_LOCAL) {
+    console.log(`  Escutando só em ${HOST}${proxyLocal() ? ' (atrás do proxy local, PROXY_LOCAL=1)' : ''}`);
+    console.log('  Endereço do GPS:    use o endereço público (https://seu-dominio/api/gps)');
+  } else {
+    for (const ip of enderecosLocais()) console.log(`  Na rede local:      http://${ip}:${PORTA}`);
+    console.log(`  Endereço do GPS:    http://<IP-acima>:${PORTA}/api/gps`);
+  }
   console.log(`  Banco de dados:     ${ARQUIVO_BANCO}`);
   console.log(`  WhatsApp (Meta):    ${whatsappConfigurado() ? 'configurado' : 'não configurado (veja Configurações > WhatsApp)'}`);
   console.log(`  Agente de IA:       ${{ claude: 'Claude', gemini: 'Gemini (grátis)', ocr: 'só leitor de texto local (grátis; para IA completa: GEMINI_API_KEY)', nenhum: 'desligado' }[provedorDeLeitura()]}`);
@@ -95,7 +108,7 @@ servidor.listen(PORTA, '0.0.0.0', () => {
   console.log('');
 });
 
-// Desligamento (Render manda SIGTERM a cada deploy/reinício): termina de enviar ao Supabase, no máximo ~8 s.
+// Desligamento (SIGTERM/SIGINT ao parar ou reiniciar o serviço): termina de enviar ao Supabase, no máximo ~8 s.
 if (nuvem) {
   let encerrando = false;
   const encerrar = async (sinal: string) => {

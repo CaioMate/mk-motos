@@ -1,0 +1,18 @@
+# =============================================================================
+#  Modelo do Caddy (HTTPS automático, o cadeado do site).
+#  O instalar.sh gera o /etc/caddy/Caddyfile final a partir deste arquivo,
+#  trocando os textos DOMINIO e DOMINIO_N8N pelos seus domínios.
+#  Não precisa editar este arquivo.
+# =============================================================================
+
+{$DOMINIO} {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}
+
+# --- n8n inicio
+{$DOMINIO_N8N} {
+	encode gzip
+	reverse_proxy 127.0.0.1:5678
+}
+# --- n8n fim

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import net from 'node:net';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import type { ArmazenamentoNuvem } from './nuvem';
 
@@ -17,7 +18,8 @@ const CHAVE_GLOBAL = '__global__';
 export const SENHA_MINIMA_VERCEL = 10;
 
 // ---------------------------------------------------------------- IP do cliente e HTTPS
-// NÃO confiamos em X-Forwarded-For (o cliente pode inventar). Só valem cabeçalhos que a plataforma define:
+// NÃO confiamos em X-Forwarded-For (o cliente pode inventar), salvo com PROXY_LOCAL=1 e conexão vinda do próprio
+// computador (proxy local): aí vale só o ÚLTIMO IP da lista. Fora isso, só valem cabeçalhos que a plataforma define:
 //  - Vercel: x-vercel-forwarded-for / x-real-ip (a Vercel sempre sobrescreve);
 //  - local atrás do túnel Cloudflare: cf-connecting-ip, mas só se a conexão vier do próprio computador (o túnel);
 //  - senão: o IP do socket.
@@ -28,9 +30,22 @@ export function definirModoVercel(v: boolean) {
 const ehLoopback = (ip: string | undefined) => !!ip && /^(::1|127\.\d+\.\d+\.\d+|::ffff:127\.\d+\.\d+\.\d+)$/.test(ip);
 const primeiro = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.split(',')[0]?.trim() || undefined;
 
+/** PROXY_LOCAL=1: há um proxy reverso (ex.: Caddy) na MESMA máquina, que acrescenta o IP real ao fim de X-Forwarded-For. */
+export const proxyLocal = () => process.env.PROXY_LOCAL === '1';
+/** Último item de X-Forwarded-For (o que o NOSSO proxy acrescentou; os anteriores podem ser forjados pelo cliente). */
+const ultimoEncaminhado = (v: string | string[] | undefined): string | undefined => {
+  const texto = Array.isArray(v) ? v.join(',') : v;
+  return texto?.split(',').at(-1)?.trim() || undefined;
+};
+
 export function ipDoCliente(req: Request): string {
   const socket = req.socket?.remoteAddress;
   if (modoVercel) return primeiro(req.headers['x-vercel-forwarded-for']) || primeiro(req.headers['x-real-ip']) || socket || 'desconhecido';
+  if (proxyLocal() && ehLoopback(socket)) {
+    const ip = ultimoEncaminhado(req.headers['x-forwarded-for']);
+    if (ip && net.isIP(ip)) return ip;
+    return socket || 'desconhecido';
+  }
   const temTunel = process.env.TUNEL_CLOUDFLARE === '1';
   if (ehLoopback(socket) && temTunel) return primeiro(req.headers['cf-connecting-ip']) || socket || 'desconhecido';
   return socket || 'desconhecido';
@@ -40,7 +55,9 @@ export function ipDoCliente(req: Request): string {
 export function conexaoSegura(req: Request): boolean {
   if (modoVercel) return true;
   if (req.socket && 'encrypted' in req.socket && req.socket.encrypted) return true;
-  return ehLoopback(req.socket?.remoteAddress) && primeiro(req.headers['x-forwarded-proto']) === 'https';
+  if (!ehLoopback(req.socket?.remoteAddress)) return false;
+  const proto = proxyLocal() ? ultimoEncaminhado(req.headers['x-forwarded-proto']) : primeiro(req.headers['x-forwarded-proto']);
+  return proto === 'https';
 }
 
 // Lidas na hora de usar, porque o .env só é carregado depois dos imports.
